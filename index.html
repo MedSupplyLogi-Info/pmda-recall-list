@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PMDA医療機器回収情報 統合CSV</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f7f8fa;
+    --card-bg: #ffffff;
+    --border: #dfe3e8;
+    --text: #1f2937;
+    --text-sub: #5f6b7a;
+    --accent: #2563eb;
+    --accent-dark: #1d4ed8;
+    --ok: #16a34a;
+    --warn: #b45309;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+    line-height: 1.7;
+  }
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 40px 20px 80px;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0 0 6px;
+  }
+  .lead {
+    color: var(--text-sub);
+    margin: 0 0 28px;
+    font-size: 14px;
+  }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .card h2 {
+    font-size: 15px;
+    margin: 0 0 12px;
+    color: var(--text-sub);
+    font-weight: 600;
+  }
+  .stat-row {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .stat {
+    min-width: 100px;
+  }
+  .stat .num {
+    font-size: 26px;
+    font-weight: 700;
+  }
+  .stat .label {
+    font-size: 12px;
+    color: var(--text-sub);
+  }
+  .download-btn {
+    display: inline-block;
+    background: var(--accent);
+    color: #fff;
+    text-decoration: none;
+    padding: 12px 22px;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .download-btn:hover { background: var(--accent-dark); }
+  .meta-line {
+    font-size: 12px;
+    color: var(--text-sub);
+    margin-top: 10px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 8px;
+  }
+  th, td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--text-sub); font-weight: 600; }
+  code {
+    background: #eef1f4;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  ul { padding-left: 20px; margin: 8px 0; }
+  li { margin-bottom: 4px; font-size: 14px; }
+  .flag-ok { color: var(--ok); }
+  .flag-warn { color: var(--warn); }
+  a.src-link { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>PMDA医療機器回収情報 統合CSV</h1>
+  <p class="lead">
+    PMDA（医薬品医療機器総合機構）が公開するクラスI・II・IIIの医療機器回収情報を統合し、
+    バーコード照合による回収品検出用に正規化したCSVをダウンロードできます。
+  </p>
+
+  <div class="card">
+    <h2>ダウンロード</h2>
+    <p id="genDate" class="meta-line">生成日時: 読み込み中...</p>
+    <div class="stat-row" id="statRow"></div>
+    <a class="download-btn" href="data/recall_list_merged.csv" download="PMDA医療機器回収リスト_統合.csv">
+      統合CSVをダウンロード
+    </a>
+  </div>
+
+  <div class="card">
+    <h2>CSVの仕様</h2>
+    <table>
+      <tr><th>列名</th><th>内容</th></tr>
+      <tr><td>一般的名称及び販売名</td><td>製品名（そのまま。改行・連続空白は半角スペース1つに正規化）</td></tr>
+      <tr><td>回収開始日</td><td><code>yyyymmdd</code>形式（例: 20260601）</td></tr>
+      <tr><td>GTIN</td><td>半角数字のみ。元梱/販売/個装のいずれかにGTINがあれば行として展開</td></tr>
+      <tr><td>ロット番号</td><td>半角英数字のみ（記号・スペース除去）</td></tr>
+      <tr><td>シリアル番号</td><td>半角英数字のみ（記号・スペース除去）</td></tr>
+    </table>
+    <p class="meta-line">
+      値が存在しないセルには固定コード <code>NODATA</code> を入力しています
+      （製品の管理方式上、その項目自体が存在しない場合を含みます。例: シリアル管理のみでロット番号がない製品など）。
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>データ取得元</h2>
+    <ul>
+      <li>クラスI: <a class="src-link" href="https://www.info.pmda.go.jp/kaisyuu/rcidx26-1k.html" target="_blank" rel="noopener">rcidx26-1k.html</a></li>
+      <li>クラスII: <a class="src-link" href="https://www.info.pmda.go.jp/kaisyuu/rcidx26-2k.html" target="_blank" rel="noopener">rcidx26-2k.html</a></li>
+      <li>クラスIII: <a class="src-link" href="https://www.info.pmda.go.jp/kaisyuu/rcidx26-3k.html" target="_blank" rel="noopener">rcidx26-3k.html</a></li>
+    </ul>
+    <p class="meta-line">
+      各ページのGTIN付きCSVを基に、回収開始日欄が構造化データ上ロット・シリアル番号とも空欄の場合のみ、
+      同ページの詳細CSV内「対象ロット、数量及び出荷時期」欄から列挙情報を自動抽出して補完しています
+      （「全ロット」等ロット非特定と明記されている場合や、抽出候補が5件未満の場合は補完せず NODATA のままとしています）。
+    </p>
+  </div>
+
+  <div class="card" id="unresolvedCard" hidden>
+    <h2>自動補完できなかった回収（要確認）</h2>
+    <p class="meta-line">以下の回収番号は、ロット・シリアル番号とも構造化データが空欄で、自由記述欄からの自動抽出もできませんでした。必要に応じて手動でPMDAサイトをご確認ください。</p>
+    <ul id="unresolvedList"></ul>
+  </div>
+
+  <div class="card">
+    <h2>データの更新について</h2>
+    <p class="meta-line">
+      PMDAの回収情報は随時更新されます。最新の状態を反映するには、このフォルダで
+      <code>node build.js</code> を再実行し、CSVを再生成してください。
+    </p>
+  </div>
+</div>
+
+<script src="data/meta.js"></script>
+<script>
+  (function () {
+    var meta = window.PMDA_META;
+    if (!meta) {
+      document.getElementById("genDate").textContent = "生成情報を読み込めませんでした（data/meta.js が見つかりません）。node build.js を実行してください。";
+      return;
+    }
+    var d = new Date(meta.generatedAt);
+    var pad = function (n) { return String(n).padStart(2, "0"); };
+    var formatted = d.getFullYear() + "/" + pad(d.getMonth() + 1) + "/" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+    document.getElementById("genDate").textContent = "生成日時: " + formatted + "（日本時間換算ではなくローカル環境の時刻表示）";
+
+    var statRow = document.getElementById("statRow");
+    var totalStat = document.createElement("div");
+    totalStat.className = "stat";
+    totalStat.innerHTML = '<div class="num">' + meta.totalRows.toLocaleString() + '</div><div class="label">総レコード数</div>';
+    statRow.appendChild(totalStat);
+
+    meta.classes.forEach(function (c) {
+      var s = document.createElement("div");
+      s.className = "stat";
+      s.innerHTML = '<div class="num">' + c.recallCount + '</div><div class="label">' + c.class + ' 回収件数</div>';
+      statRow.appendChild(s);
+    });
+
+    var unresolved = [];
+    meta.classes.forEach(function (c) {
+      (c.unresolvedRecalls || []).forEach(function (no) {
+        unresolved.push(c.class + ": " + no);
+      });
+    });
+    if (unresolved.length > 0) {
+      document.getElementById("unresolvedCard").hidden = false;
+      var list = document.getElementById("unresolvedList");
+      unresolved.forEach(function (t) {
+        var li = document.createElement("li");
+        li.textContent = t;
+        list.appendChild(li);
+      });
+    }
+  })();
+</script>
+</body>
+</html>
