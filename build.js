@@ -120,6 +120,32 @@ function sanitizeDigits(str) {
   return toHalfWidth(str || "").replace(/[^0-9]/g, "");
 }
 
+// GS1標準のGTINチェックデジット（モジュラス10、ウェイト3/1交互）を検証する。
+// 桁数が8/12/13/14以外の場合は標準GTINではないため検証対象外とし、そのまま真とする（安全側）。
+function isValidGtinCheckDigit(gtin) {
+  if (![8, 12, 13, 14].includes(gtin.length)) return true;
+  const digits = gtin.split("").map(Number);
+  const check = digits.pop();
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    const posFromRight = digits.length - 1 - i;
+    sum += digits[i] * (posFromRight % 2 === 0 ? 3 : 1);
+  }
+  return (10 - (sum % 10)) % 10 === check;
+}
+
+// GTINを数字のみに正規化した上でチェックデジットを検証する。不正な場合は null を返す
+// （実在するバーコードとして印字され得ない値のため、GTIN未提供と同様に扱う）。
+function sanitizeAndValidateGtin(str, invalidLog) {
+  const cleaned = sanitizeDigits(str);
+  if (!cleaned) return null;
+  if (!isValidGtinCheckDigit(cleaned)) {
+    if (invalidLog) invalidLog.add(cleaned);
+    return null;
+  }
+  return cleaned;
+}
+
 function sanitizeAlnum(str) {
   return toHalfWidth(str || "").replace(/[^0-9A-Za-z]/g, "");
 }
@@ -277,6 +303,7 @@ async function processClass(cls) {
   const supplementedRecalls = new Set();
   const unresolvedRecalls = new Set();
   const gtinMissingRecalls = new Set();
+  const invalidChecksumGtins = new Set();
 
   const gtinRecallIds = new Set(gtinData.map((r) => r[0]));
 
@@ -286,7 +313,15 @@ async function processClass(cls) {
     const name = cleanText(rawName) || NODATA;
     const dateYmd = convertEraDateToYyyymmdd(rawDate) || NODATA;
 
-    const gtinValues = [...new Set([gtinOuter, gtinSale, gtinPack].map((g) => sanitizeDigits(g)).filter(Boolean))];
+    // チェックデジット不正なGTIN（実在するバーコードとして印字され得ない値）は、
+    // GTIN未提供と同様に扱う（invalidChecksumGtinsに記録の上、行からは除外）。
+    const gtinValues = [
+      ...new Set(
+        [gtinOuter, gtinSale, gtinPack]
+          .map((g) => sanitizeAndValidateGtin(g, invalidChecksumGtins))
+          .filter(Boolean)
+      ),
+    ];
     const gtinList = gtinValues.length > 0 ? gtinValues : [NODATA];
 
     let lot = sanitizeAlnum(rawLot);
@@ -346,6 +381,7 @@ async function processClass(cls) {
     supplementedRecalls: [...supplementedRecalls],
     unresolvedRecalls: [...unresolvedRecalls],
     gtinMissingRecalls: [...gtinMissingRecalls],
+    invalidChecksumGtins: [...invalidChecksumGtins],
     recallCount: allRecallIds.size,
   };
 }
@@ -370,8 +406,9 @@ async function main() {
       supplementedRecalls: result.supplementedRecalls,
       unresolvedRecalls: result.unresolvedRecalls,
       gtinMissingRecalls: result.gtinMissingRecalls,
+      invalidChecksumGtins: result.invalidChecksumGtins,
     });
-    console.log(`[${cls.label}] 回収件数=${result.recallCount} 出力行数=${result.outputRows.length} 自由記述から補完=${result.supplementedRecalls.length}件 未解決=${result.unresolvedRecalls.length}件 GTIN未提供=${result.gtinMissingRecalls.length}件`);
+    console.log(`[${cls.label}] 回収件数=${result.recallCount} 出力行数=${result.outputRows.length} 自由記述から補完=${result.supplementedRecalls.length}件 未解決=${result.unresolvedRecalls.length}件 GTIN未提供=${result.gtinMissingRecalls.length}件 チェックデジット不正GTIN=${result.invalidChecksumGtins.length}件`);
   }
 
   // 重複行（同一の name/date/GTIN/lot/serial）を除去

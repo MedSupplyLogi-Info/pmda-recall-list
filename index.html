@@ -133,7 +133,7 @@
       <tr><th>列名</th><th>内容</th></tr>
       <tr><td>一般的名称及び販売名</td><td>製品名（そのまま。改行・連続空白は半角スペース1つに正規化）</td></tr>
       <tr><td>回収開始日</td><td><code>yyyymmdd</code>形式（例: 20260601）</td></tr>
-      <tr><td>GTIN</td><td>半角数字のみ。元梱/販売/個装のいずれかにGTINがあれば行として展開</td></tr>
+      <tr><td>GTIN</td><td>半角数字のみ。元梱/販売/個装のいずれかにGTINがあれば行として展開。GS1チェックデジットが不正な値はNODATAとして除外</td></tr>
       <tr><td>ロット番号</td><td>半角英数字のみ（記号・スペース除去）</td></tr>
       <tr><td>シリアル番号</td><td>半角英数字のみ（記号・スペース除去）</td></tr>
     </table>
@@ -161,6 +161,15 @@
     <h2>自動補完できなかった回収（要確認）</h2>
     <p class="meta-line">以下の回収番号は、ロット・シリアル番号とも構造化データが空欄で、自由記述欄からの自動抽出もできませんでした。必要に応じて手動でPMDAサイトをご確認ください。</p>
     <ul id="unresolvedList"></ul>
+  </div>
+
+  <div class="card" id="invalidGtinCard" hidden>
+    <h2>チェックデジット不正のため除外したGTIN</h2>
+    <p class="meta-line">
+      PMDA公開データ中、GS1標準のチェックデジット検証に失敗したGTIN値です。実在するバーコードとして印字され得ない値のため、
+      統合CSVでは該当GTINをNODATAとして扱っています（ロット番号・シリアル番号はそのまま保持）。
+    </p>
+    <ul id="invalidGtinList"></ul>
   </div>
 
   <div class="card">
@@ -211,6 +220,22 @@
         var li = document.createElement("li");
         li.textContent = t;
         list.appendChild(li);
+      });
+    }
+
+    var invalidGtins = [];
+    meta.classes.forEach(function (c) {
+      (c.invalidChecksumGtins || []).forEach(function (g) {
+        invalidGtins.push(c.class + ": " + g);
+      });
+    });
+    if (invalidGtins.length > 0) {
+      document.getElementById("invalidGtinCard").hidden = false;
+      var gList = document.getElementById("invalidGtinList");
+      invalidGtins.forEach(function (t) {
+        var li = document.createElement("li");
+        li.textContent = t;
+        gList.appendChild(li);
       });
     }
   })();
