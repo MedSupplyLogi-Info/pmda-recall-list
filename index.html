@@ -175,8 +175,12 @@
   <div class="card">
     <h2>データの更新について</h2>
     <p class="meta-line">
-      PMDAの回収情報は随時更新されます。最新の状態を反映するには、このフォルダで
-      <code>node build.js</code> を再実行し、CSVを再生成してください。
+      毎朝9:00（日本時間）に、GitHub Actions上のプログラムが自動的にPMDAサイトから最新情報を取得し、
+      CSVを再生成・再公開しています。手動での更新作業は不要です。
+    </p>
+    <p class="meta-line">
+      取得対象は<strong>当該年度（令和8年度）に掲載された回収情報のみ</strong>です。過去の年度分は含まれていません。
+      ローカルで手動更新したい場合は、このフォルダで <code>node build.js</code> を再実行してください。
     </p>
   </div>
 </div>
@@ -207,34 +211,49 @@
       statRow.appendChild(s);
     });
 
+    function detailUrl(recallNo) {
+      return "https://www.info.pmda.go.jp/rgo/MainServlet?recallno=" + encodeURIComponent(recallNo);
+    }
+    function appendDetailLink(li, recallNo) {
+      var a = document.createElement("a");
+      a.href = detailUrl(recallNo);
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.className = "src-link";
+      a.textContent = "個別ページを見る";
+      li.appendChild(a);
+    }
+
     var unresolved = [];
     meta.classes.forEach(function (c) {
       (c.unresolvedRecalls || []).forEach(function (no) {
-        unresolved.push(c.class + ": " + no);
+        unresolved.push({ cls: c.class, recallNo: no });
       });
     });
     if (unresolved.length > 0) {
       document.getElementById("unresolvedCard").hidden = false;
       var list = document.getElementById("unresolvedList");
-      unresolved.forEach(function (t) {
+      unresolved.forEach(function (item) {
         var li = document.createElement("li");
-        li.textContent = t;
+        li.appendChild(document.createTextNode(item.cls + ": " + item.recallNo + "　"));
+        appendDetailLink(li, item.recallNo);
         list.appendChild(li);
       });
     }
 
     var invalidGtins = [];
     meta.classes.forEach(function (c) {
-      (c.invalidChecksumGtins || []).forEach(function (g) {
-        invalidGtins.push(c.class + ": " + g);
+      (c.invalidChecksumGtins || []).forEach(function (item) {
+        invalidGtins.push({ cls: c.class, gtin: item.gtin, recallNo: item.recallNo, name: item.name });
       });
     });
     if (invalidGtins.length > 0) {
       document.getElementById("invalidGtinCard").hidden = false;
       var gList = document.getElementById("invalidGtinList");
-      invalidGtins.forEach(function (t) {
+      invalidGtins.forEach(function (item) {
         var li = document.createElement("li");
-        li.textContent = t;
+        li.appendChild(document.createTextNode(item.cls + ": " + item.gtin + "（" + item.name + "）　"));
+        appendDetailLink(li, item.recallNo);
         gList.appendChild(li);
       });
     }

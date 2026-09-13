@@ -136,11 +136,12 @@ function isValidGtinCheckDigit(gtin) {
 
 // GTINを数字のみに正規化した上でチェックデジットを検証する。不正な場合は null を返す
 // （実在するバーコードとして印字され得ない値のため、GTIN未提供と同様に扱う）。
-function sanitizeAndValidateGtin(str, invalidLog) {
+// invalidLog には後で個別ページへのリンクを示せるよう、回収番号・製品名も併記して記録する。
+function sanitizeAndValidateGtin(str, recallNo, name, invalidLog) {
   const cleaned = sanitizeDigits(str);
   if (!cleaned) return null;
   if (!isValidGtinCheckDigit(cleaned)) {
-    if (invalidLog) invalidLog.add(cleaned);
+    if (invalidLog) invalidLog.set(cleaned + "|" + recallNo, { gtin: cleaned, recallNo, name });
     return null;
   }
   return cleaned;
@@ -303,7 +304,7 @@ async function processClass(cls) {
   const supplementedRecalls = new Set();
   const unresolvedRecalls = new Set();
   const gtinMissingRecalls = new Set();
-  const invalidChecksumGtins = new Set();
+  const invalidChecksumGtins = new Map();
 
   const gtinRecallIds = new Set(gtinData.map((r) => r[0]));
 
@@ -318,7 +319,7 @@ async function processClass(cls) {
     const gtinValues = [
       ...new Set(
         [gtinOuter, gtinSale, gtinPack]
-          .map((g) => sanitizeAndValidateGtin(g, invalidChecksumGtins))
+          .map((g) => sanitizeAndValidateGtin(g, recallNo, name, invalidChecksumGtins))
           .filter(Boolean)
       ),
     ];
@@ -381,7 +382,7 @@ async function processClass(cls) {
     supplementedRecalls: [...supplementedRecalls],
     unresolvedRecalls: [...unresolvedRecalls],
     gtinMissingRecalls: [...gtinMissingRecalls],
-    invalidChecksumGtins: [...invalidChecksumGtins],
+    invalidChecksumGtins: [...invalidChecksumGtins.values()],
     recallCount: allRecallIds.size,
   };
 }
