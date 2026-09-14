@@ -172,6 +172,18 @@
     <ul id="invalidGtinList"></ul>
   </div>
 
+  <div class="card" id="ambiguousCard" hidden>
+    <h2>ロット/シリアルの区分を断定できなかった回収（要確認）</h2>
+    <p class="meta-line">
+      構造化データ・自由記述とも「シリアル番号：」「対象ロット：」等の明示ラベルが無く、
+      数字の列挙のみから値を復元した回収です。値そのものはPMDA公開データに実在しますが、
+      ロット番号・シリアル番号のどちらに該当するかを元データから機械的に判別できないため、
+      このCSVでは便宜上<strong>シリアル番号列に格納</strong>しています（ロット番号の可能性もあります）。
+      正確な区分が必要な場合は、個別ページで前後の文脈をご確認ください。
+    </p>
+    <ul id="ambiguousList"></ul>
+  </div>
+
   <div class="card">
     <h2>データの更新について</h2>
     <p class="meta-line">
@@ -255,6 +267,23 @@
         li.appendChild(document.createTextNode(item.cls + ": " + item.gtin + "（" + item.name + "）　"));
         appendDetailLink(li, item.recallNo);
         gList.appendChild(li);
+      });
+    }
+
+    var ambiguous = [];
+    meta.classes.forEach(function (c) {
+      (c.ambiguousTypeRecalls || []).forEach(function (no) {
+        ambiguous.push({ cls: c.class, recallNo: no });
+      });
+    });
+    if (ambiguous.length > 0) {
+      document.getElementById("ambiguousCard").hidden = false;
+      var amList = document.getElementById("ambiguousList");
+      ambiguous.forEach(function (item) {
+        var li = document.createElement("li");
+        li.appendChild(document.createTextNode(item.cls + ": " + item.recallNo + "　"));
+        appendDetailLink(li, item.recallNo);
+        amList.appendChild(li);
       });
     }
   })();

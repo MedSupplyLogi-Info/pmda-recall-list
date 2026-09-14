@@ -255,13 +255,18 @@ function extractEnumeratedCodesFromFreeText(freeText) {
 }
 
 // ロット・シリアルが両方欠落している場合に、自由記述から補完を試みる統一エントリポイント。
-// 戻り値: { type: "lot"|"serial", codes: string[] } または見つからなければ null。
+// 戻り値: { type: "lot"|"serial", codes: string[], confident: boolean } または見つからなければ null。
+//
+// confident=true は「シリアル番号：」「対象ロット：」等のラベルから機械的に判別できたケース。
+// confident=false は旧方式（全文からの数字列挙）でのフォールバックで、ロット/シリアルいずれの
+// 値かを元テキストから判別する手がかりが無いため、便宜上シリアル番号側に割り当てているに過ぎない
+// （＝この区分は推定であり、断定ではない）。
 function resolveMissingCodes(freeText) {
   const labeled = extractLabeledCodes(freeText);
-  if (labeled.serial.length > 0) return { type: "serial", codes: labeled.serial };
-  if (labeled.lot.length > 0) return { type: "lot", codes: labeled.lot };
+  if (labeled.serial.length > 0) return { type: "serial", codes: labeled.serial, confident: true };
+  if (labeled.lot.length > 0) return { type: "lot", codes: labeled.lot, confident: true };
   const blind = extractEnumeratedCodesFromFreeText(freeText);
-  if (blind.length > 0) return { type: "serial", codes: blind };
+  if (blind.length > 0) return { type: "serial", codes: blind, confident: false };
   return null;
 }
 
@@ -305,6 +310,7 @@ async function processClass(cls) {
   const unresolvedRecalls = new Set();
   const gtinMissingRecalls = new Set();
   const invalidChecksumGtins = new Map();
+  const ambiguousTypeRecalls = new Set();
 
   const gtinRecallIds = new Set(gtinData.map((r) => r[0]));
 
@@ -334,6 +340,7 @@ async function processClass(cls) {
       const resolved = resolveMissingCodes(freeText);
       if (resolved) {
         supplementedRecalls.add(recallNo);
+        if (!resolved.confident) ambiguousTypeRecalls.add(recallNo);
         for (const gtin of gtinList) {
           for (const code of resolved.codes) {
             outputRows.push(resolved.type === "serial" ? [name, dateYmd, gtin, NODATA, code] : [name, dateYmd, gtin, code, NODATA]);
@@ -366,6 +373,7 @@ async function processClass(cls) {
 
     if (resolved) {
       supplementedRecalls.add(recallNo);
+      if (!resolved.confident) ambiguousTypeRecalls.add(recallNo);
       for (const code of resolved.codes) {
         outputRows.push(resolved.type === "serial" ? [name, dateYmd, NODATA, NODATA, code] : [name, dateYmd, NODATA, code, NODATA]);
       }
@@ -383,6 +391,7 @@ async function processClass(cls) {
     unresolvedRecalls: [...unresolvedRecalls],
     gtinMissingRecalls: [...gtinMissingRecalls],
     invalidChecksumGtins: [...invalidChecksumGtins.values()],
+    ambiguousTypeRecalls: [...ambiguousTypeRecalls],
     recallCount: allRecallIds.size,
   };
 }
@@ -408,8 +417,9 @@ async function main() {
       unresolvedRecalls: result.unresolvedRecalls,
       gtinMissingRecalls: result.gtinMissingRecalls,
       invalidChecksumGtins: result.invalidChecksumGtins,
+      ambiguousTypeRecalls: result.ambiguousTypeRecalls,
     });
-    console.log(`[${cls.label}] 回収件数=${result.recallCount} 出力行数=${result.outputRows.length} 自由記述から補完=${result.supplementedRecalls.length}件 未解決=${result.unresolvedRecalls.length}件 GTIN未提供=${result.gtinMissingRecalls.length}件 チェックデジット不正GTIN=${result.invalidChecksumGtins.length}件`);
+    console.log(`[${cls.label}] 回収件数=${result.recallCount} 出力行数=${result.outputRows.length} 自由記述から補完=${result.supplementedRecalls.length}件 未解決=${result.unresolvedRecalls.length}件 GTIN未提供=${result.gtinMissingRecalls.length}件 チェックデジット不正GTIN=${result.invalidChecksumGtins.length}件 ロット/シリアル区分推定=${result.ambiguousTypeRecalls.length}件`);
   }
 
   // 重複行（同一の name/date/GTIN/lot/serial）を除去
