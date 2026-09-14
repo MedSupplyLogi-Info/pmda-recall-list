@@ -294,6 +294,18 @@ function cleanDetailName(raw) {
   return cleanText(stripped);
 }
 
+// 詳細版CSVの「一般的名称及び販売名」列を「一般的名称」と「販売名」に分割する
+// （Webページで両方を併記できるようにするため）。
+function splitGeneralAndBrandName(raw) {
+  if (!raw) return { generalName: "", brandName: "" };
+  const generalMatch = raw.match(/一般的名称[:：]([\s\S]*?)(?=販売名\s*[:：]|$)/);
+  const brandMatch = raw.match(/販売名\s*[:：]([\s\S]*)$/);
+  return {
+    generalName: cleanText(generalMatch ? generalMatch[1] : ""),
+    brandName: cleanText(brandMatch ? brandMatch[1] : ""),
+  };
+}
+
 // ---------- メイン処理 ----------
 
 async function processClass(cls) {
@@ -324,7 +336,7 @@ async function processClass(cls) {
 
   const outputRows = [];
   const supplementedRecalls = new Set();
-  const unresolvedRecalls = new Set();
+  const unresolvedRecalls = new Map();
   const gtinMissingRecalls = new Set();
   const invalidChecksumGtins = new Map();
   const ambiguousTypeRecalls = new Set();
@@ -366,7 +378,8 @@ async function processClass(cls) {
         }
         continue;
       } else {
-        unresolvedRecalls.add(recallNo);
+        const { generalName, brandName } = splitGeneralAndBrandName(detailRow ? detailRow[detailNameColIdx] : "");
+        unresolvedRecalls.set(recallNo, { recallNo, generalName, brandName });
       }
     }
 
@@ -396,7 +409,8 @@ async function processClass(cls) {
         outputRows.push([name, dateYmd, NODATA, lotVal, serialVal]);
       }
     } else {
-      unresolvedRecalls.add(recallNo);
+      const { generalName, brandName } = splitGeneralAndBrandName(detailRow[detailNameColIdx]);
+      unresolvedRecalls.set(recallNo, { recallNo, generalName, brandName });
       outputRows.push([name, dateYmd, NODATA, NODATA, NODATA]);
     }
   }
@@ -406,7 +420,7 @@ async function processClass(cls) {
   return {
     outputRows,
     supplementedRecalls: [...supplementedRecalls],
-    unresolvedRecalls: [...unresolvedRecalls],
+    unresolvedRecalls: [...unresolvedRecalls.values()],
     gtinMissingRecalls: [...gtinMissingRecalls],
     invalidChecksumGtins: [...invalidChecksumGtins.values()],
     ambiguousTypeRecalls: [...ambiguousTypeRecalls],

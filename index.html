@@ -108,6 +108,29 @@
   .flag-ok { color: var(--ok); }
   .flag-warn { color: var(--warn); }
   a.src-link { color: var(--accent); }
+
+  ul.product-list { list-style: none; padding: 0; margin: 8px 0 0; }
+  ul.product-list li {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+  ul.product-list .recall-no {
+    font-size: 12px;
+    color: var(--text-sub);
+    margin-bottom: 2px;
+  }
+  ul.product-list .general-name {
+    font-size: 13px;
+    color: var(--text-sub);
+  }
+  ul.product-list .brand-name {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  ul.product-list .brand-name a { color: var(--accent); text-decoration: none; }
+  ul.product-list .brand-name a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -159,8 +182,8 @@
 
   <div class="card" id="unresolvedCard" hidden>
     <h2>自動補完できなかった回収（要確認）</h2>
-    <p class="meta-line">以下の回収番号は、ロット・シリアル番号とも構造化データが空欄で、自由記述欄からの自動抽出もできませんでした。必要に応じて手動でPMDAサイトをご確認ください。</p>
-    <ul id="unresolvedList"></ul>
+    <p class="meta-line">以下の製品は、ロット・シリアル番号とも構造化データが空欄で、自由記述欄からの自動抽出もできませんでした。販売名のリンクから回収情報をご確認ください。</p>
+    <ul class="product-list" id="unresolvedList"></ul>
   </div>
 
   <div class="card" id="invalidGtinCard" hidden>
@@ -239,8 +262,8 @@
 
     var unresolved = [];
     meta.classes.forEach(function (c) {
-      (c.unresolvedRecalls || []).forEach(function (no) {
-        unresolved.push({ cls: c.class, recallNo: no });
+      (c.unresolvedRecalls || []).forEach(function (item) {
+        unresolved.push({ cls: c.class, recallNo: item.recallNo, generalName: item.generalName, brandName: item.brandName });
       });
     });
     if (unresolved.length > 0) {
@@ -248,8 +271,28 @@
       var list = document.getElementById("unresolvedList");
       unresolved.forEach(function (item) {
         var li = document.createElement("li");
-        li.appendChild(document.createTextNode(item.cls + ": " + item.recallNo + "　"));
-        appendDetailLink(li, item.recallNo);
+
+        var recallLine = document.createElement("div");
+        recallLine.className = "recall-no";
+        recallLine.textContent = item.cls + ": " + item.recallNo;
+        li.appendChild(recallLine);
+
+        var generalLine = document.createElement("div");
+        generalLine.className = "general-name";
+        generalLine.textContent = "一般的名称: " + (item.generalName || "(不明)");
+        li.appendChild(generalLine);
+
+        var brandLine = document.createElement("div");
+        brandLine.className = "brand-name";
+        brandLine.appendChild(document.createTextNode("販売名: "));
+        var a = document.createElement("a");
+        a.href = detailUrl(item.recallNo);
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.textContent = item.brandName || "(不明。回収情報を見る)";
+        brandLine.appendChild(a);
+        li.appendChild(brandLine);
+
         list.appendChild(li);
       });
     }
