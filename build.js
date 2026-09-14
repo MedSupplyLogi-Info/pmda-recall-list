@@ -270,6 +270,23 @@ function resolveMissingCodes(freeText) {
   return null;
 }
 
+// resolveMissingCodes の結果から [ロット番号, シリアル番号] の組を組み立てる。
+// ラベルから確実に判別できた場合（confident=true）は該当する列だけを埋めた1パターンのみ。
+// 判別できず推定に頼った場合（confident=false）は、ロット番号として埋めた行とシリアル番号
+// として埋めた行の両方を出力する。どちらの列を照合するバーコードシステムでも実データと
+// 一致できるよう、断定せず両論併記する（GTIN元梱/販売/個装を全て展開するのと同じ考え方）。
+function buildLotSerialPairs(resolved) {
+  if (resolved.confident) {
+    return resolved.codes.map((code) => (resolved.type === "serial" ? [NODATA, code] : [code, NODATA]));
+  }
+  const pairs = [];
+  for (const code of resolved.codes) {
+    pairs.push([code, NODATA]);
+    pairs.push([NODATA, code]);
+  }
+  return pairs;
+}
+
 // 詳細版CSVの「一般的名称及び販売名」列は「一般的名称：X\n販売名　：Y」形式のラベル付き記述のため、
 // GTIN版の名称列（プレーンテキスト）と表記を揃えるためラベルを除去して結合する。
 function cleanDetailName(raw) {
@@ -341,9 +358,10 @@ async function processClass(cls) {
       if (resolved) {
         supplementedRecalls.add(recallNo);
         if (!resolved.confident) ambiguousTypeRecalls.add(recallNo);
+        const pairs = buildLotSerialPairs(resolved);
         for (const gtin of gtinList) {
-          for (const code of resolved.codes) {
-            outputRows.push(resolved.type === "serial" ? [name, dateYmd, gtin, NODATA, code] : [name, dateYmd, gtin, code, NODATA]);
+          for (const [lotVal, serialVal] of pairs) {
+            outputRows.push([name, dateYmd, gtin, lotVal, serialVal]);
           }
         }
         continue;
@@ -374,8 +392,8 @@ async function processClass(cls) {
     if (resolved) {
       supplementedRecalls.add(recallNo);
       if (!resolved.confident) ambiguousTypeRecalls.add(recallNo);
-      for (const code of resolved.codes) {
-        outputRows.push(resolved.type === "serial" ? [name, dateYmd, NODATA, NODATA, code] : [name, dateYmd, NODATA, code, NODATA]);
+      for (const [lotVal, serialVal] of buildLotSerialPairs(resolved)) {
+        outputRows.push([name, dateYmd, NODATA, lotVal, serialVal]);
       }
     } else {
       unresolvedRecalls.add(recallNo);
