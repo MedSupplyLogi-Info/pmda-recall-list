@@ -270,6 +270,25 @@ function resolveMissingCodes(freeText) {
   return null;
 }
 
+// 復元できなかった回収のうち、「要確認」として提示する意味が無い（本来的に空欄が正しい）
+// ケースを判別する。いずれも一覧からは除外するが、CSV側の行（NODATA）はこれまで通り出力する。
+//
+// ・全ロット対応: 自由記述に「対象ロット：全ロット」等の明記があり、ロット非特定であることが
+//   PMDA側で既に確定しているため、確認の必要が無い。
+// ・ソフトウェア医療機器: 自由記述が「バージョン X.Y」形式のバージョン表記のみで構成されており、
+//   そもそもGTIN/ロット/シリアルという概念が存在しない製品と判断できる。
+function isAllLotsNonSpecific(freeText) {
+  if (!freeText) return false;
+  return /全ロット/.test(toHalfWidth(freeText));
+}
+function looksLikeSoftwareVersioning(freeText) {
+  if (!freeText) return false;
+  return /バージョン\s*[0-9]+(\.[0-9]+)+/.test(toHalfWidth(freeText));
+}
+function shouldSkipUnresolvedReport(freeText) {
+  return isAllLotsNonSpecific(freeText) || looksLikeSoftwareVersioning(freeText);
+}
+
 // resolveMissingCodes の結果から [ロット番号, シリアル番号] の組を組み立てる。
 // ラベルから確実に判別できた場合（confident=true）は該当する列だけを埋めた1パターンのみ。
 // 判別できず推定に頼った場合（confident=false）は、ロット番号として埋めた行とシリアル番号
@@ -340,6 +359,9 @@ async function processClass(cls) {
   const gtinMissingRecalls = new Set();
   const invalidChecksumGtins = new Map();
   const ambiguousTypeRecalls = new Set();
+  // 「全ロット対応」「ソフトウェア医療機器」であることが自由記述から確認でき、要確認リストに
+  // 出す意味が無いため除外した回収（build-log.jsonのみに記録し、ページには表示しない）。
+  const excludedUnresolvedRecalls = new Set();
 
   const gtinRecallIds = new Set(gtinData.map((r) => r[0]));
 
@@ -377,6 +399,8 @@ async function processClass(cls) {
           }
         }
         continue;
+      } else if (shouldSkipUnresolvedReport(freeText)) {
+        excludedUnresolvedRecalls.add(recallNo);
       } else {
         const { generalName, brandName } = splitGeneralAndBrandName(detailRow ? detailRow[detailNameColIdx] : "");
         unresolvedRecalls.set(recallNo, { recallNo, generalName, brandName });
@@ -409,8 +433,12 @@ async function processClass(cls) {
         outputRows.push([name, dateYmd, NODATA, lotVal, serialVal]);
       }
     } else {
-      const { generalName, brandName } = splitGeneralAndBrandName(detailRow[detailNameColIdx]);
-      unresolvedRecalls.set(recallNo, { recallNo, generalName, brandName });
+      if (shouldSkipUnresolvedReport(freeText)) {
+        excludedUnresolvedRecalls.add(recallNo);
+      } else {
+        const { generalName, brandName } = splitGeneralAndBrandName(detailRow[detailNameColIdx]);
+        unresolvedRecalls.set(recallNo, { recallNo, generalName, brandName });
+      }
       outputRows.push([name, dateYmd, NODATA, NODATA, NODATA]);
     }
   }
@@ -424,6 +452,7 @@ async function processClass(cls) {
     gtinMissingRecalls: [...gtinMissingRecalls],
     invalidChecksumGtins: [...invalidChecksumGtins.values()],
     ambiguousTypeRecalls: [...ambiguousTypeRecalls],
+    excludedUnresolvedRecalls: [...excludedUnresolvedRecalls],
     recallCount: allRecallIds.size,
   };
 }
@@ -450,8 +479,9 @@ async function main() {
       gtinMissingRecalls: result.gtinMissingRecalls,
       invalidChecksumGtins: result.invalidChecksumGtins,
       ambiguousTypeRecalls: result.ambiguousTypeRecalls,
+      excludedUnresolvedRecalls: result.excludedUnresolvedRecalls,
     });
-    console.log(`[${cls.label}] 回収件数=${result.recallCount} 出力行数=${result.outputRows.length} 自由記述から補完=${result.supplementedRecalls.length}件 未解決=${result.unresolvedRecalls.length}件 GTIN未提供=${result.gtinMissingRecalls.length}件 チェックデジット不正GTIN=${result.invalidChecksumGtins.length}件 ロット/シリアル区分推定=${result.ambiguousTypeRecalls.length}件`);
+    console.log(`[${cls.label}] 回収件数=${result.recallCount} 出力行数=${result.outputRows.length} 自由記述から補完=${result.supplementedRecalls.length}件 未解決=${result.unresolvedRecalls.length}件（除外${result.excludedUnresolvedRecalls.length}件） GTIN未提供=${result.gtinMissingRecalls.length}件 チェックデジット不正GTIN=${result.invalidChecksumGtins.length}件 ロット/シリアル区分推定=${result.ambiguousTypeRecalls.length}件`);
   }
 
   // 重複行（同一の name/date/GTIN/lot/serial）を除去
