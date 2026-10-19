@@ -217,7 +217,7 @@
     </p>
     <p class="meta-line">
       <strong>累積版</strong>には上記7列に加えて8列目「状態」が追加されます（<code>現行</code> / <code>回収済み（PMDA提供データから削除）</code>）。
-      詳細は下記「回収済み（PMDA提供データから削除）」の項をご覧ください。
+      詳細は下記<a class="src-link" href="#removedCard">「回収済み（PMDA提供データから削除）」の項</a>をご覧ください。
     </p>
   </div>
 
@@ -239,7 +239,8 @@
     <h2>GTIN版CSVに収録されていない回収</h2>
     <p class="meta-line">
       以下の回収は、PMDAが提供する「GTIN付きCSV」に対応する行が一件もありません
-      （ソフトウェア医療機器でGTIN自体が存在しない、または製造販売業者がGTIN内訳を未提出の場合）。
+      （製造販売業者がGTIN内訳をPMDAに未提出の場合のほか、ソフトウェア医療機器など、当該製品にGTINが登録されていない場合が含まれます。
+      GS1の規格上はソフトウェアへのGTIN付与も可能であり、GTINが存在し得ないわけではありません）。
       詳細版CSVの情報を基に、GTIN列をNODATAとして統合CSVに含めています（検出漏れを防ぐため、行自体は省略していません）。
     </p>
     <ul class="product-list" id="gtinMissingList"></ul>
@@ -262,7 +263,7 @@
     </p>
   </div>
 
-  <div class="card" id="removedCard" hidden>
+  <div class="card" id="removedCard">
     <h2>回収済み（PMDA提供データから削除）</h2>
     <p class="meta-line">
       以前はPMDAのCSVに含まれていたものの、その後のビルドでPMDA提供データから見られなくなった回収です
@@ -271,6 +272,7 @@
       この検出は <span id="historyTrackingSince">本機能導入日</span> 以降の変化のみを対象としており、
       それ以前に既にPMDAデータから削除されていた回収は対象外です。
     </p>
+    <p class="meta-line" id="removedEmptyNote">現時点で該当する回収はありません（追跡開始から日が浅いためです。既存の回収が完了しデータから削除されると、ここに表示されます）。</p>
     <ul class="product-list" id="removedList"></ul>
   </div>
 
@@ -447,10 +449,11 @@
       });
     }
 
-    // 回収済み（PMDA提供データから削除）
+    // 回収済み（PMDA提供データから削除）。該当0件の場合もセクション自体は常に表示し、
+    // その旨を説明する（上記「CSVの仕様」からの参照先が常に実在するようにするため）。
     var removedArchive = meta.removedArchive || [];
     if (removedArchive.length > 0) {
-      document.getElementById("removedCard").hidden = false;
+      document.getElementById("removedEmptyNote").hidden = true;
       var rList = document.getElementById("removedList");
       removedArchive.forEach(function (item) {
         var removedDate = item.removedAt ? new Date(item.removedAt).toISOString().slice(0, 10) : "不明";
