@@ -579,7 +579,9 @@ async function main() {
     generatedAt: nowIso,
     recalls: Object.fromEntries(allRecallRowsMap),
   };
-  fs.writeFileSync(OUT_HISTORY, JSON.stringify(history), "utf8");
+  // 整形して保存する（圧縮1行JSONだとgitの行単位マージが効かず、無関係な変更でも
+  // 毎回コンフリクトになるため。回収番号単位でキーを分けておけば大抵は自動マージできる）。
+  fs.writeFileSync(OUT_HISTORY, JSON.stringify(history, null, 1), "utf8");
 
   const removedArchiveList = Object.entries(history.removedArchive).map(([recallNo, v]) => ({
     recallNo,
@@ -588,6 +590,7 @@ async function main() {
     brandName: v.brandName,
     removedAt: v.removedAt,
     rowCount: v.rows.length,
+    note: v.note,
   }));
 
   // ---------- 累積CSV：現行データ＋回収済み（PMDA提供データから削除済み）データ ----------

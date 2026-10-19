@@ -1,0 +1,834 @@
+[
+  {
+    "class": "クラスII",
+    "recallNo": "2-12911",
+    "postDate": "2026/07/28",
+    "generalName": "体外式鼻用副木",
+    "brandName": "デンバースプリント",
+    "maker": "株式会社名優",
+    "biko": "回収終了",
+    "dateYmd": "20260727",
+    "rows": [
+      {
+        "gtin": "04580198999349",
+        "lot": "247819",
+        "serial": "NODATA"
+      }
+    ],
+    "truncated": false
+  },
+  {
+    "class": "クラスII",
+    "recallNo": "2-12899",
+    "postDate": "2026/07/17",
+    "generalName": "自家植皮拡張器",
+    "brandName": "メッシュキャリアー",
+    "maker": "ケイセイ医科工業株式会社",
+    "biko": "回収終了",
+    "dateYmd": "20260717",
+    "rows": [
+      {
+        "gtin": "34946279745747",
+        "lot": "251016",
+        "serial": "NODATA"
+      }
+    ],
+    "truncated": false
+  },
+  {
+    "class": "クラスII",
+    "recallNo": "2-12875",
+    "postDate": "2026/07/06",
+    "generalName": "体動センサ",
+    "brandName": "眠りＳＣＡＮ（ＮＮ‐１５３０）",
+    "maker": "パラマウントベッド株式会社",
+    "biko": "回収終了",
+    "dateYmd": "20260703",
+    "rows": [
+      {
+        "gtin": "04527799704415",
+        "lot": "0163709",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04527799704415",
+        "lot": "0213866",
+        "serial": "NODATA"
+      }
+    ],
+    "truncated": false
+  },
+  {
+    "class": "クラスII",
+    "recallNo": "2-12874",
+    "postDate": "2026/07/06",
+    "generalName": "体動センサ",
+    "brandName": "眠りＳＣＡＮ（ＮＮ‐１５３０）",
+    "maker": "パラマウントベッド株式会社",
+    "biko": "回収終了",
+    "dateYmd": "20260703",
+    "rows": [
+      {
+        "gtin": "04527799704415",
+        "lot": "0213865",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04527799704415",
+        "lot": "0213866",
+        "serial": "NODATA"
+      }
+    ],
+    "truncated": false
+  },
+  {
+    "class": "クラスII",
+    "recallNo": "2-12871",
+    "postDate": "2026/07/02",
+    "generalName": "移動式ディスクリート方式臨床化学自動分析装置",
+    "brandName": "ビオリス30i",
+    "maker": "ビオリスメディカル株式会社",
+    "biko": "回収終了",
+    "dateYmd": "20260625",
+    "rows": [
+      {
+        "gtin": "04580262016002",
+        "lot": "NODATA",
+        "serial": "6019530326"
+      },
+      {
+        "gtin": "04580262016002",
+        "lot": "NODATA",
+        "serial": "6019540426"
+      },
+      {
+        "gtin": "04580262016002",
+        "lot": "NODATA",
+        "serial": "6019550426"
+      },
+      {
+        "gtin": "04580262016002",
+        "lot": "NODATA",
+        "serial": "6019560426"
+      },
+      {
+        "gtin": "04580262016002",
+        "lot": "NODATA",
+        "serial": "6019570526"
+      },
+      {
+        "gtin": "04580262016002",
+        "lot": "NODATA",
+        "serial": "6019580526"
+      },
+      {
+        "gtin": "04580262016002",
+        "lot": "NODATA",
+        "serial": "6019590526"
+      },
+      {
+        "gtin": "04580262016002",
+        "lot": "NODATA",
+        "serial": "6019600526"
+      },
+      {
+        "gtin": "04580262016002",
+        "lot": "NODATA",
+        "serial": "6019610526"
+      },
+      {
+        "gtin": "04580262016002",
+        "lot": "NODATA",
+        "serial": "6019620526"
+      },
+      {
+        "gtin": "04580262016002",
+        "lot": "NODATA",
+        "serial": "6019630626"
+      }
+    ],
+    "truncated": false
+  },
+  {
+    "class": "クラスII",
+    "recallNo": "2-12851",
+    "postDate": "2026/06/19",
+    "generalName": "関節手術用器械",
+    "brandName": "PAインスツルメント",
+    "maker": "株式会社　オーミック",
+    "biko": "回収終了",
+    "dateYmd": "20260617",
+    "rows": [
+      {
+        "gtin": "04589727642268",
+        "lot": "ZM25B0003",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04589727642268",
+        "lot": "ZM25B0028",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04589727642268",
+        "lot": "ZM25B0053",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04589727642268",
+        "lot": "ZM25C0003",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04589727642268",
+        "lot": "ZM25B0028",
+        "serial": "NODATA"
+      }
+    ],
+    "truncated": false
+  },
+  {
+    "class": "クラスII",
+    "recallNo": "2-12843",
+    "postDate": "2026/06/15",
+    "generalName": "人工股関節大腿骨コンポーネント",
+    "brandName": "Conformity フェモラルステム",
+    "maker": "ユナイテッド・オーソペディック・ジャパン株式会社",
+    "biko": "回収終了",
+    "dateYmd": "20260602",
+    "rows": [
+      {
+        "gtin": "04711605583428",
+        "lot": "25HE43A",
+        "serial": "NODATA"
+      }
+    ],
+    "truncated": false
+  },
+  {
+    "class": "クラスII",
+    "recallNo": "2-12825",
+    "postDate": "2026/05/29",
+    "generalName": "心臓運動負荷モニタリングシステム",
+    "brandName": "マルケットCASEシリーズ",
+    "maker": "GEヘルスケア・ジャパン株式会社",
+    "biko": "回収終了",
+    "dateYmd": "20260529",
+    "rows": [
+      {
+        "gtin": "00195278617644",
+        "lot": "NODATA",
+        "serial": "SU324342101SA"
+      },
+      {
+        "gtin": "00195278617644",
+        "lot": "NODATA",
+        "serial": "SU325062327SA"
+      },
+      {
+        "gtin": "00195278617644",
+        "lot": "NODATA",
+        "serial": "SU325062328SA"
+      }
+    ],
+    "truncated": false
+  },
+  {
+    "class": "クラスII",
+    "recallNo": "2-12821",
+    "postDate": "2026/05/28",
+    "generalName": "全身用X線CT診断装置",
+    "brandName": "ブリリアンス iCT",
+    "maker": "株式会社フィリップス・ジャパン",
+    "biko": "回収終了",
+    "dateYmd": "20260526",
+    "rows": [
+      {
+        "gtin": "04580761517949",
+        "lot": "100498",
+        "serial": "NODATA"
+      }
+    ],
+    "truncated": false
+  },
+  {
+    "class": "クラスII",
+    "recallNo": "2-12817",
+    "postDate": "2026/05/26",
+    "generalName": "核医学診断用ポジトロンCT装置",
+    "brandName": "TOF-PET装置 BresTome",
+    "maker": "株式会社島津製作所",
+    "biko": "回収終了",
+    "dateYmd": "20260525",
+    "rows": [
+      {
+        "gtin": "04540217061280",
+        "lot": "NODATA",
+        "serial": "MZ29812C5001"
+      },
+      {
+        "gtin": "04540217061280",
+        "lot": "NODATA",
+        "serial": "MZ29812CA001"
+      },
+      {
+        "gtin": "04540217061280",
+        "lot": "NODATA",
+        "serial": "MZ29812CC001"
+      },
+      {
+        "gtin": "04540217061280",
+        "lot": "NODATA",
+        "serial": "MZ29812D2001"
+      },
+      {
+        "gtin": "04540217061280",
+        "lot": "NODATA",
+        "serial": "MZ29812D5001"
+      },
+      {
+        "gtin": "04540217061280",
+        "lot": "NODATA",
+        "serial": "MZ29812DB001"
+      },
+      {
+        "gtin": "04540217061280",
+        "lot": "NODATA",
+        "serial": "MZ29812DC001"
+      },
+      {
+        "gtin": "04540217061280",
+        "lot": "NODATA",
+        "serial": "MZ29812E7001"
+      }
+    ],
+    "truncated": false
+  },
+  {
+    "class": "クラスII",
+    "recallNo": "2-12807",
+    "postDate": "2026/05/18",
+    "generalName": "手術台アクセサリー",
+    "brandName": "トレンデレンブルグ ディスポカバー",
+    "maker": "村中医療器株式会社",
+    "biko": "回収終了",
+    "dateYmd": "20260518",
+    "rows": [
+      {
+        "gtin": "10810121680244",
+        "lot": "0012707",
+        "serial": "NODATA"
+      }
+    ],
+    "truncated": false
+  },
+  {
+    "class": "クラスII",
+    "recallNo": "2-12791",
+    "postDate": "2026/05/08",
+    "generalName": "白内障・硝子体手術装置",
+    "brandName": "ＥＶＡ ＮＥＸＵＳ パック／キット",
+    "maker": "アールイーメディカル株式会社",
+    "biko": "2026/5/12 「2. 対象ロット、数量及び出荷時期」の訂正回収終了",
+    "dateYmd": "20260508",
+    "rows": [
+      {
+        "gtin": "14580151305740",
+        "lot": "60302XX1",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04580151308737",
+        "lot": "60302XX1",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "14580151305740",
+        "lot": "70568XX1",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04580151308737",
+        "lot": "70568XX1",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "14580151305740",
+        "lot": "71807XX1",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04580151308737",
+        "lot": "71807XX1",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "14580151305740",
+        "lot": "76809XX1",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04580151308737",
+        "lot": "76809XX1",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "14580151305740",
+        "lot": "79901XX1",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04580151308737",
+        "lot": "79901XX1",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "14580151305740",
+        "lot": "80336XX1",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04580151308737",
+        "lot": "80336XX1",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "14580151305740",
+        "lot": "80960XX1",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04580151308737",
+        "lot": "80960XX1",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "14580151305740",
+        "lot": "81974XX1",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04580151308737",
+        "lot": "81974XX1",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "14580151305740",
+        "lot": "88973001",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04580151308737",
+        "lot": "88973001",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "14580151305740",
+        "lot": "93342001",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04580151308737",
+        "lot": "93342001",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "14580151305740",
+        "lot": "93343001",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04580151308737",
+        "lot": "93343001",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "14580151305740",
+        "lot": "94355001",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04580151308737",
+        "lot": "94355001",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "14580151305740",
+        "lot": "95463001",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04580151308737",
+        "lot": "95463001",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "14580151305740",
+        "lot": "95464001",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04580151308737",
+        "lot": "95464001",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "14580151305740",
+        "lot": "99166001",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04580151308737",
+        "lot": "99166001",
+        "serial": "NODATA"
+      }
+    ],
+    "truncated": true
+  },
+  {
+    "class": "クラスII",
+    "recallNo": "2-12784",
+    "postDate": "2026/05/01",
+    "generalName": "婦人科用細胞剥離子",
+    "brandName": "IMサンプラー",
+    "maker": "ステインケミカル株式会社",
+    "biko": "2026/5/15 「2. 対象ロット、数量及び出荷時期」の訂正回収終了",
+    "dateYmd": "20260427",
+    "rows": [
+      {
+        "gtin": "04517715220136",
+        "lot": "250701",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04517715220136",
+        "lot": "250801",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04517715220136",
+        "lot": "251001",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04517715220136",
+        "lot": "251201",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04517715220136",
+        "lot": "260201",
+        "serial": "NODATA"
+      }
+    ],
+    "truncated": false
+  },
+  {
+    "class": "クラスII",
+    "recallNo": "2-12783",
+    "postDate": "2026/04/30",
+    "generalName": "単回使用組織生検用針",
+    "brandName": "フルオート生検針 ベスティオII",
+    "maker": "ドクタージャパン株式会社",
+    "biko": "回収終了",
+    "dateYmd": "20260415",
+    "rows": [
+      {
+        "gtin": "14900719504680",
+        "lot": "20251208A",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04900719504683",
+        "lot": "20251208A",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "14900719504697",
+        "lot": "20251208A",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04900719504690",
+        "lot": "20251208A",
+        "serial": "NODATA"
+      }
+    ],
+    "truncated": false
+  },
+  {
+    "class": "クラスII",
+    "recallNo": "2-12773",
+    "postDate": "2026/04/22",
+    "generalName": "滅菌済み鍼",
+    "brandName": "NEOディスポ鍼",
+    "maker": "株式会社山正",
+    "biko": "回収終了",
+    "dateYmd": "20260417",
+    "rows": [
+      {
+        "gtin": "04979844181618",
+        "lot": "342",
+        "serial": "NODATA"
+      }
+    ],
+    "truncated": false
+  },
+  {
+    "class": "クラスII",
+    "recallNo": "2-12766",
+    "postDate": "2026/04/20",
+    "generalName": "歯冠用硬質レジン(70811020)",
+    "brandName": "トルサナ",
+    "maker": "株式会社フォレスト・ワン",
+    "biko": "回収終了",
+    "dateYmd": "20260417",
+    "rows": [
+      {
+        "gtin": "04580720518567",
+        "lot": "BT0185",
+        "serial": "NODATA"
+      }
+    ],
+    "truncated": false
+  },
+  {
+    "class": "クラスII",
+    "recallNo": "2-12754",
+    "postDate": "2026/04/13",
+    "generalName": "経食道体外型心臓ペースメーカ用電極",
+    "brandName": "サーカ・テンプモニター・システム",
+    "maker": "株式会社IFJ",
+    "biko": "回収終了",
+    "dateYmd": "20260413",
+    "rows": [
+      {
+        "gtin": "10850049994887",
+        "lot": "008252",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04595121987034",
+        "lot": "008252",
+        "serial": "NODATA"
+      }
+    ],
+    "truncated": false
+  },
+  {
+    "class": "クラスII",
+    "recallNo": "2-12748",
+    "postDate": "2026/04/08",
+    "generalName": "短期的使用胃瘻栄養用チューブ",
+    "brandName": "ＧＢ胃瘻バルーンカテーテル",
+    "maker": "富士システムズ株式会社",
+    "biko": "回収終了",
+    "dateYmd": "20260408",
+    "rows": [
+      {
+        "gtin": "14544050094198",
+        "lot": "2406650",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04544050094191",
+        "lot": "2406650",
+        "serial": "NODATA"
+      }
+    ],
+    "truncated": false
+  },
+  {
+    "class": "クラスII",
+    "recallNo": "2-12747",
+    "postDate": "2026/04/08",
+    "generalName": "粒子線治療装置",
+    "brandName": "(1)陽子線治療システム PROBEAT-M1 (2)陽子線治療システム PROBEAT-CS",
+    "maker": "株式会社日立ハイテク",
+    "biko": "回収終了",
+    "dateYmd": "20260401",
+    "rows": [
+      {
+        "gtin": "04560333350068",
+        "lot": "PTM1",
+        "serial": "01"
+      },
+      {
+        "gtin": "04560333350242",
+        "lot": "PTCS",
+        "serial": "01"
+      }
+    ],
+    "truncated": false
+  },
+  {
+    "class": "クラスII",
+    "recallNo": "2-12742",
+    "postDate": "2026/04/03",
+    "generalName": "眼底カメラ用プログラム",
+    "brandName": "ルックレック ファンダス",
+    "maker": "株式会社エムネス",
+    "biko": "回収終了",
+    "dateYmd": "20260316",
+    "rows": [],
+    "truncated": false
+  },
+  {
+    "class": "クラスIII",
+    "recallNo": "3-3084",
+    "postDate": "2026/06/12",
+    "generalName": "歯科用インプラントシステム",
+    "brandName": "アイ・エイ・ティー フィットII",
+    "maker": "リケンＮＰＲ株式会社",
+    "biko": "回収終了",
+    "dateYmd": "20260520",
+    "rows": [
+      {
+        "gtin": "04573423406163",
+        "lot": "H44H41",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04573423406170",
+        "lot": "H44W01",
+        "serial": "NODATA"
+      },
+      {
+        "gtin": "04573423406170",
+        "lot": "H44X03",
+        "serial": "NODATA"
+      }
+    ],
+    "truncated": false
+  },
+  {
+    "class": "クラスIII",
+    "recallNo": "3-3080",
+    "postDate": "2026/06/03",
+    "generalName": "小型未包装用高圧蒸気滅菌器",
+    "brandName": "オートクレーブ ＭＰＳ",
+    "maker": "トミー工業株式会社",
+    "biko": "回収終了",
+    "dateYmd": "20260527",
+    "rows": [
+      {
+        "gtin": "04571308100366",
+        "lot": "NODATA",
+        "serial": "23176804"
+      },
+      {
+        "gtin": "04571308100366",
+        "lot": "NODATA",
+        "serial": "59178001"
+      },
+      {
+        "gtin": "04571308100366",
+        "lot": "NODATA",
+        "serial": "59178002"
+      },
+      {
+        "gtin": "04571308100366",
+        "lot": "NODATA",
+        "serial": "59178003"
+      },
+      {
+        "gtin": "04571308100366",
+        "lot": "NODATA",
+        "serial": "59178004"
+      },
+      {
+        "gtin": "04571308100366",
+        "lot": "NODATA",
+        "serial": "59178005"
+      },
+      {
+        "gtin": "04571308100366",
+        "lot": "NODATA",
+        "serial": "59178006"
+      },
+      {
+        "gtin": "04571308100366",
+        "lot": "NODATA",
+        "serial": "59178007"
+      },
+      {
+        "gtin": "04571308100366",
+        "lot": "NODATA",
+        "serial": "59178008"
+      },
+      {
+        "gtin": "04571308100366",
+        "lot": "NODATA",
+        "serial": "59178009"
+      },
+      {
+        "gtin": "04571308100366",
+        "lot": "NODATA",
+        "serial": "59178010"
+      },
+      {
+        "gtin": "04571308100366",
+        "lot": "NODATA",
+        "serial": "59178011"
+      },
+      {
+        "gtin": "04571308100366",
+        "lot": "NODATA",
+        "serial": "59178012"
+      },
+      {
+        "gtin": "04571308100366",
+        "lot": "NODATA",
+        "serial": "59178013"
+      },
+      {
+        "gtin": "04571308100366",
+        "lot": "NODATA",
+        "serial": "59178014"
+      }
+    ],
+    "truncated": true
+  },
+  {
+    "class": "クラスIII",
+    "recallNo": "3-3079",
+    "postDate": "2026/06/01",
+    "generalName": "ネラトンカテーテル",
+    "brandName": "ロビンソンカテーテルA",
+    "maker": "澤谷ゴム株式会社",
+    "biko": "回収終了",
+    "dateYmd": "20250407",
+    "rows": [],
+    "truncated": false
+  },
+  {
+    "class": "クラスIII",
+    "recallNo": "3-3070",
+    "postDate": "2026/04/20",
+    "generalName": "眼鏡レンズ",
+    "brandName": "アイフレンド ＰＰＬ １，５６ ＡＳ（ＭＣ）",
+    "maker": "株式会社アイフレンド",
+    "biko": "回収終了",
+    "dateYmd": "20240928",
+    "rows": [],
+    "truncated": false
+  },
+  {
+    "class": "クラスIII",
+    "recallNo": "3-3067",
+    "postDate": "2026/04/07",
+    "generalName": "白内障・硝子体手術装置",
+    "brandName": "眼科手術用周辺機器",
+    "maker": "株式会社ニデック",
+    "biko": "回収終了",
+    "dateYmd": "20260330",
+    "rows": [
+      {
+        "gtin": "04987669609378",
+        "lot": "25A29",
+        "serial": "NODATA"
+      }
+    ],
+    "truncated": false
+  }
+]

@@ -269,8 +269,14 @@
       以前はPMDAのCSVに含まれていたものの、その後のビルドでPMDA提供データから見られなくなった回収です
       （回収完了等の理由が考えられますが、正確な理由はPMDA公式サイトでご確認ください）。
       <strong>統合CSV（現行のみ）には含まれません。累積版CSVにのみ、状態「回収済み」として収録しています。</strong>
-      この検出は <span id="historyTrackingSince">本機能導入日</span> 以降の変化のみを対象としており、
-      それ以前に既にPMDAデータから削除されていた回収は対象外です。
+      自動検出は <span id="historyTrackingSince">本機能導入日</span> 以降の変化のみを対象としており、
+      それ以前に既にPMDAデータから削除されていた回収は本来対象外です。
+    </p>
+    <p class="meta-line">
+      <strong>2026年10月19日、一時的な遡及調査として以下を反映しています：</strong>
+      PMDAの各クラス一覧ページ（HTML）の「備考」欄に「回収終了」と記載があり、かつ現行CSVに存在しない回収25件について、
+      各回収の個別ページから直接GTIN・ロット・シリアル情報を取得し、本機能導入前の状況として手動で追加しました。
+      これは一度限りの措置であり、今後の自動検出の仕組み自体は変更していません。
     </p>
     <p class="meta-line" id="removedEmptyNote">現時点で該当する回収はありません（追跡開始から日が浅いためです。既存の回収が完了しデータから削除されると、ここに表示されます）。</p>
     <ul class="product-list" id="removedList"></ul>
@@ -457,7 +463,9 @@
       var rList = document.getElementById("removedList");
       removedArchive.forEach(function (item) {
         var removedDate = item.removedAt ? new Date(item.removedAt).toISOString().slice(0, 10) : "不明";
-        rList.appendChild(buildProductLi(item.class, item.recallNo, item.generalName, item.brandName, "削除検出日: " + removedDate + "　収録行数: " + item.rowCount));
+        var extra = "削除検出日: " + removedDate + "　収録行数: " + item.rowCount;
+        if (item.note) extra += "　※" + item.note;
+        rList.appendChild(buildProductLi(item.class, item.recallNo, item.generalName, item.brandName, extra));
       });
     }
 
