@@ -10,9 +10,14 @@ const zlib = require("zlib");
 
 const OUT_DIR = path.join(__dirname, "data");
 const OUT_CSV = path.join(OUT_DIR, "recall_list_merged.csv");
+const OUT_CUMULATIVE_CSV = path.join(OUT_DIR, "recall_list_cumulative.csv");
+const OUT_HISTORY = path.join(OUT_DIR, "history.json");
 const OUT_LOG = path.join(OUT_DIR, "build-log.json");
 const OUT_META_JS = path.join(OUT_DIR, "meta.js");
 const NODATA = "NODATA"; // 空欄セルであることを示す固定コード
+const STATUS_COL = "状態";
+const STATUS_ACTIVE = "現行";
+const STATUS_REMOVED = "回収済み（PMDA提供データから削除）";
 
 const CLASSES = [
   {
@@ -353,17 +358,30 @@ async function processClass(cls) {
   const detailByRecall = new Map();
   for (const r of detailData) detailByRecall.set(r[0], r);
 
-  const outputRows = [];
-  const supplementedRecalls = new Set();
-  const unresolvedRecalls = new Map();
-  const gtinMissingRecalls = new Set();
+  const taggedRows = []; // { recallNo, row } を一時的に保持し、後で履歴用に回収番号単位へ集約する
   const invalidChecksumGtins = new Map();
   const ambiguousTypeRecalls = new Set();
-  // 「全ロット対応」「ソフトウェア医療機器」であることが自由記述から確認でき、要確認リストに
-  // 出す意味が無いため除外した回収（build-log.jsonのみに記録し、ページには表示しない）。
-  const excludedUnresolvedRecalls = new Set();
+  // ロット・シリアルが両方欠落していた回収を、復元結果のステータス付きで一元管理する。
+  // status: "supplemented"(自由記述から復元) / "unresolved"(復元不可・要確認) /
+  //         "excluded"(全ロット対応・ソフトウェア等、本来的に空欄が正しいため要確認から除外)
+  const bothBlankRecalls = new Map();
+  const gtinMissingRecalls = new Map();
 
   const gtinRecallIds = new Set(gtinData.map((r) => r[0]));
+
+  function recordBothBlank(recallNo, detailRow, freeText, resolved) {
+    const { generalName, brandName } = splitGeneralAndBrandName(detailRow ? detailRow[detailNameColIdx] : "");
+    let status;
+    if (resolved) {
+      status = "supplemented";
+      if (!resolved.confident) ambiguousTypeRecalls.add(recallNo);
+    } else if (shouldSkipUnresolvedReport(freeText)) {
+      status = "excluded";
+    } else {
+      status = "unresolved";
+    }
+    bothBlankRecalls.set(recallNo, { recallNo, generalName, brandName, status });
+  }
 
   for (const r of gtinData) {
     const [recallNo, , rawName, rawDate, gtinOuter, gtinSale, gtinPack, rawLot, rawSerial] = r;
@@ -389,28 +407,22 @@ async function processClass(cls) {
       const detailRow = detailByRecall.get(recallNo);
       const freeText = detailRow ? detailRow[freeTextColIdx] : null;
       const resolved = resolveMissingCodes(freeText);
+      recordBothBlank(recallNo, detailRow, freeText, resolved);
       if (resolved) {
-        supplementedRecalls.add(recallNo);
-        if (!resolved.confident) ambiguousTypeRecalls.add(recallNo);
         const pairs = buildLotSerialPairs(resolved);
         for (const gtin of gtinList) {
           for (const [lotVal, serialVal] of pairs) {
-            outputRows.push([name, dateYmd, gtin, lotVal, serialVal]);
+            taggedRows.push({ recallNo, row: [name, dateYmd, gtin, lotVal, serialVal] });
           }
         }
         continue;
-      } else if (shouldSkipUnresolvedReport(freeText)) {
-        excludedUnresolvedRecalls.add(recallNo);
-      } else {
-        const { generalName, brandName } = splitGeneralAndBrandName(detailRow ? detailRow[detailNameColIdx] : "");
-        unresolvedRecalls.set(recallNo, { recallNo, generalName, brandName });
       }
     }
 
     const lotOut = lot || NODATA;
     const serialOut = serial || NODATA;
     for (const gtin of gtinList) {
-      outputRows.push([name, dateYmd, gtin, lotOut, serialOut]);
+      taggedRows.push({ recallNo, row: [name, dateYmd, gtin, lotOut, serialOut] });
     }
   }
 
@@ -420,39 +432,51 @@ async function processClass(cls) {
     const recallNo = detailRow[0];
     if (gtinRecallIds.has(recallNo)) continue;
 
-    gtinMissingRecalls.add(recallNo);
+    const { generalName, brandName } = splitGeneralAndBrandName(detailRow[detailNameColIdx]);
+    gtinMissingRecalls.set(recallNo, { recallNo, generalName, brandName });
+
     const name = cleanDetailName(detailRow[detailNameColIdx]) || NODATA;
     const dateYmd = convertEraDateToYyyymmdd(detailRow[detailDateColIdx]) || NODATA;
     const freeText = detailRow[freeTextColIdx];
     const resolved = resolveMissingCodes(freeText);
+    recordBothBlank(recallNo, detailRow, freeText, resolved);
 
     if (resolved) {
-      supplementedRecalls.add(recallNo);
-      if (!resolved.confident) ambiguousTypeRecalls.add(recallNo);
       for (const [lotVal, serialVal] of buildLotSerialPairs(resolved)) {
-        outputRows.push([name, dateYmd, NODATA, lotVal, serialVal]);
+        taggedRows.push({ recallNo, row: [name, dateYmd, NODATA, lotVal, serialVal] });
       }
     } else {
-      if (shouldSkipUnresolvedReport(freeText)) {
-        excludedUnresolvedRecalls.add(recallNo);
-      } else {
-        const { generalName, brandName } = splitGeneralAndBrandName(detailRow[detailNameColIdx]);
-        unresolvedRecalls.set(recallNo, { recallNo, generalName, brandName });
-      }
-      outputRows.push([name, dateYmd, NODATA, NODATA, NODATA]);
+      taggedRows.push({ recallNo, row: [name, dateYmd, NODATA, NODATA, NODATA] });
     }
   }
 
+  // 回収番号単位の行一覧（履歴保存・累積CSV用）を構築する
+  const recallRowsMap = new Map();
+  for (const { recallNo, row } of taggedRows) {
+    if (!recallRowsMap.has(recallNo)) {
+      const detailRow = detailByRecall.get(recallNo);
+      const { generalName, brandName } = splitGeneralAndBrandName(detailRow ? detailRow[detailNameColIdx] : "");
+      recallRowsMap.set(recallNo, { recallNo, class: cls.label, generalName, brandName, rows: [] });
+    }
+    recallRowsMap.get(recallNo).rows.push(row);
+  }
+
+  const outputRows = taggedRows.map((t) => t.row);
   const allRecallIds = new Set([...gtinRecallIds, ...detailData.map((r) => r[0])]);
+
+  const supplemented = [...bothBlankRecalls.values()].filter((x) => x.status === "supplemented");
+  const unresolved = [...bothBlankRecalls.values()].filter((x) => x.status === "unresolved");
+  const excluded = [...bothBlankRecalls.values()].filter((x) => x.status === "excluded");
 
   return {
     outputRows,
-    supplementedRecalls: [...supplementedRecalls],
-    unresolvedRecalls: [...unresolvedRecalls.values()],
-    gtinMissingRecalls: [...gtinMissingRecalls],
+    recallRowsMap,
+    supplementedRecalls: supplemented,
+    unresolvedRecalls: unresolved,
+    excludedUnresolvedRecalls: excluded,
+    gtinMissingRecalls: [...gtinMissingRecalls.values()],
     invalidChecksumGtins: [...invalidChecksumGtins.values()],
     ambiguousTypeRecalls: [...ambiguousTypeRecalls],
-    excludedUnresolvedRecalls: [...excludedUnresolvedRecalls],
     recallCount: allRecallIds.size,
   };
 }
@@ -461,15 +485,32 @@ function toCsvField(v) {
   return `"${String(v).replace(/"/g, '""')}"`;
 }
 
+function writeCsv(filePath, header, rows) {
+  const lines = [header.map(toCsvField).join(",")];
+  for (const row of rows) lines.push(row.map(toCsvField).join(","));
+  fs.writeFileSync(filePath, "﻿" + lines.join("\r\n") + "\r\n", "utf8");
+}
+
+// 前回実行時点のスナップショット（history.json）を読み込む。初回実行時は存在しない。
+function loadHistory() {
+  try {
+    return JSON.parse(fs.readFileSync(OUT_HISTORY, "utf8"));
+  } catch {
+    return { lastSnapshot: { generatedAt: null, recalls: {} }, removedArchive: {} };
+  }
+}
+
 async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
   const allRows = [];
   const summary = [];
+  const allRecallRowsMap = new Map(); // 回収番号 -> {recallNo, class, generalName, brandName, rows}
 
   for (const cls of CLASSES) {
     const result = await processClass(cls);
     allRows.push(...result.outputRows);
+    for (const [recallNo, info] of result.recallRowsMap) allRecallRowsMap.set(recallNo, info);
     summary.push({
       class: cls.label,
       recallCount: result.recallCount,
@@ -496,17 +537,62 @@ async function main() {
   }
 
   const header = ["一般的名称及び販売名", "回収開始日", "GTIN", "ロット番号", "シリアル番号"];
-  const csvLines = [header.map(toCsvField).join(",")];
-  for (const row of dedupedRows) csvLines.push(row.map(toCsvField).join(","));
-  const csvContent = "﻿" + csvLines.join("\r\n") + "\r\n";
+  writeCsv(OUT_CSV, header, dedupedRows);
 
-  fs.writeFileSync(OUT_CSV, csvContent, "utf8");
+  // ---------- 履歴管理：PMDA提供データから消えた（＝回収済みと推定される）回収の検出 ----------
+  const history = loadHistory();
+  const prevRecalls = history.lastSnapshot.recalls || {};
+  const nowIso = new Date().toISOString();
+  if (!history.trackingStartedAt) history.trackingStartedAt = nowIso;
+
+  const currentIds = new Set(allRecallRowsMap.keys());
+  const prevIds = Object.keys(prevRecalls);
+
+  let newlyRemovedCount = 0;
+  for (const recallNo of prevIds) {
+    if (!currentIds.has(recallNo) && !history.removedArchive[recallNo]) {
+      history.removedArchive[recallNo] = { ...prevRecalls[recallNo], removedAt: nowIso };
+      newlyRemovedCount++;
+    }
+  }
+  // PMDAのデータに再度現れた場合（再掲載等）は、現行データを優先し archive から外す
+  for (const recallNo of currentIds) {
+    if (history.removedArchive[recallNo]) delete history.removedArchive[recallNo];
+  }
+
+  history.lastSnapshot = {
+    generatedAt: nowIso,
+    recalls: Object.fromEntries(allRecallRowsMap),
+  };
+  fs.writeFileSync(OUT_HISTORY, JSON.stringify(history), "utf8");
+
+  const removedArchiveList = Object.entries(history.removedArchive).map(([recallNo, v]) => ({
+    recallNo,
+    class: v.class,
+    generalName: v.generalName,
+    brandName: v.brandName,
+    removedAt: v.removedAt,
+    rowCount: v.rows.length,
+  }));
+
+  // ---------- 累積CSV：現行データ＋回収済み（PMDA提供データから削除済み）データ ----------
+  const cumulativeHeader = [...header, STATUS_COL];
+  const cumulativeRows = [
+    ...dedupedRows.map((row) => [...row, STATUS_ACTIVE]),
+    ...Object.values(history.removedArchive).flatMap((v) => v.rows.map((row) => [...row, STATUS_REMOVED])),
+  ];
+  writeCsv(OUT_CUMULATIVE_CSV, cumulativeHeader, cumulativeRows);
 
   const log = {
-    generatedAt: new Date().toISOString(),
+    generatedAt: nowIso,
     totalRows: dedupedRows.length,
     duplicatesRemoved: allRows.length - dedupedRows.length,
     nodataMarker: NODATA,
+    cumulativeTotalRows: cumulativeRows.length,
+    removedArchiveCount: removedArchiveList.length,
+    removedArchiveNewThisRun: newlyRemovedCount,
+    trackingStartedAt: history.trackingStartedAt,
+    removedArchive: removedArchiveList,
     classes: summary,
   };
   fs.writeFileSync(OUT_LOG, JSON.stringify(log, null, 2), "utf8");
@@ -515,6 +601,7 @@ async function main() {
   fs.writeFileSync(OUT_META_JS, "window.PMDA_META = " + JSON.stringify(log, null, 2) + ";\n", "utf8");
 
   console.log(`\n完了: ${dedupedRows.length}行 -> ${OUT_CSV}`);
+  console.log(`累積版: ${cumulativeRows.length}行（回収済み${removedArchiveList.length}件分を含む、うち今回新たに検出${newlyRemovedCount}件） -> ${OUT_CUMULATIVE_CSV}`);
   console.log(`ビルドログ -> ${OUT_LOG}`);
 }
 

@@ -131,6 +131,39 @@
   }
   ul.product-list .brand-name a { color: var(--accent); text-decoration: none; }
   ul.product-list .brand-name a:hover { text-decoration: underline; }
+
+  .disclaimer {
+    margin-top: 16px;
+    padding: 14px 16px;
+    background: #fdf1e2;
+    border: 1px solid #f0c68a;
+    border-radius: 6px;
+    font-size: 12.5px;
+    color: #7a4a0a;
+    line-height: 1.8;
+  }
+  .disclaimer strong { color: #7a4a0a; }
+
+  .download-btn.secondary {
+    background: #fff;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    margin-left: 8px;
+  }
+  .download-btn.secondary:hover { background: #eef4ff; }
+  .download-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+  .status-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+  }
+  .status-ok { background: #e3f2ef; color: #0f6e64; }
+  .status-warn { background: #fdf1e2; color: #b45309; }
+  .status-removed { background: #ececec; color: #5f6b7a; }
 </style>
 </head>
 <body>
@@ -145,9 +178,25 @@
     <h2>ダウンロード</h2>
     <p id="genDate" class="meta-line">生成日時: 読み込み中...</p>
     <div class="stat-row" id="statRow"></div>
-    <a class="download-btn" href="data/recall_list_merged.csv" download="PMDA医療機器回収リスト_統合.csv">
-      統合CSVをダウンロード
-    </a>
+    <div class="download-row">
+      <a class="download-btn" href="data/recall_list_merged.csv" download="PMDA医療機器回収リスト_統合.csv">
+        統合CSVをダウンロード（現行のみ）
+      </a>
+      <a class="download-btn secondary" href="data/recall_list_cumulative.csv" download="PMDA医療機器回収リスト_累積版.csv">
+        累積版をダウンロード（回収済み含む）
+      </a>
+    </div>
+    <p class="meta-line" id="cumulativeNote"></p>
+
+    <div class="disclaimer">
+      <strong>免責事項</strong><br>
+      本CSVは、PMDA（医薬品医療機器総合機構）が公開する医療機器回収情報を基に、当サイトが独自に加工・正規化したものです。
+      PMDAが公式に提供するデータそのものではなく、PMDAによる監修・保証を受けたものでもありません。
+      加工処理（文字コード変換、全角→半角変換、GTIN/ロット番号/シリアル番号の正規化、自由記述からの欠損値自動復元等）の過程で、
+      誤りや元データとの差異が生じる可能性があります。本CSVの内容は参考情報としてご利用いただき、
+      重要な判断や公式な確認が必要な場合は、必ず<a href="https://www.pmda.go.jp/safety/recalls-fsc/0002.html" target="_blank" rel="noopener">PMDA公式サイト</a>の原本情報をご確認ください。
+      本CSVの利用により生じたいかなる損害についても、作成者は責任を負いません。
+    </div>
   </div>
 
   <div class="card">
@@ -163,6 +212,10 @@
     <p class="meta-line">
       値が存在しないセルには固定コード <code>NODATA</code> を入力しています
       （製品の管理方式上、その項目自体が存在しない場合を含みます。例: シリアル管理のみでロット番号がない製品など）。
+    </p>
+    <p class="meta-line">
+      <strong>累積版</strong>には上記5列に加えて6列目「状態」が追加されます（<code>現行</code> / <code>回収済み（PMDA提供データから削除）</code>）。
+      詳細は下記「回収済み（PMDA提供データから削除）」の項をご覧ください。
     </p>
   </div>
 
@@ -180,10 +233,43 @@
     </p>
   </div>
 
-  <div class="card" id="unresolvedCard" hidden>
-    <h2>自動補完できなかった回収（要確認）</h2>
-    <p class="meta-line">以下の製品は、ロット・シリアル番号とも構造化データが空欄で、自由記述欄からの自動抽出もできませんでした。販売名のリンクから回収情報をご確認ください。</p>
-    <ul class="product-list" id="unresolvedList"></ul>
+  <div class="card" id="gtinMissingCard" hidden>
+    <h2>GTIN版CSVに収録されていない回収</h2>
+    <p class="meta-line">
+      以下の回収は、PMDAが提供する「GTIN付きCSV」に対応する行が一件もありません
+      （ソフトウェア医療機器でGTIN自体が存在しない、または製造販売業者がGTIN内訳を未提出の場合）。
+      詳細版CSVの情報を基に、GTIN列をNODATAとして統合CSVに含めています（検出漏れを防ぐため、行自体は省略していません）。
+    </p>
+    <ul class="product-list" id="gtinMissingList"></ul>
+  </div>
+
+  <div class="card" id="bothBlankCard" hidden>
+    <h2>ロット・シリアル番号が両方とも空欄だった回収と、その補完状況</h2>
+    <p class="meta-line">
+      PMDAのGTIN付きCSVでロット番号・シリアル番号が両方とも空欄だった回収の一覧です。
+      「対象ロット、数量及び出荷時期」欄の自由記述から復元を試み、結果を状態として表示しています。
+    </p>
+    <table>
+      <tr><th>状態</th><th>回収番号</th><th>一般的名称</th><th>販売名</th></tr>
+      <tbody id="bothBlankRows"></tbody>
+    </table>
+    <p class="meta-line">
+      <span class="status-badge status-ok">補完成功</span> 自由記述から復元できた
+      <span class="status-badge status-warn">要確認</span> 復元できず NODATA のまま
+      <span class="status-badge status-removed">対象外</span> 「全ロット」明記・ソフトウェア製品等、空欄が正しいため確認不要
+    </p>
+  </div>
+
+  <div class="card" id="removedCard" hidden>
+    <h2>回収済み（PMDA提供データから削除）</h2>
+    <p class="meta-line">
+      以前はPMDAのCSVに含まれていたものの、その後のビルドでPMDA提供データから見られなくなった回収です
+      （回収完了等の理由が考えられますが、正確な理由はPMDA公式サイトでご確認ください）。
+      <strong>統合CSV（現行のみ）には含まれません。累積版CSVにのみ、状態「回収済み」として収録しています。</strong>
+      この検出は <span id="historyTrackingSince">本機能導入日</span> 以降の変化のみを対象としており、
+      それ以前に既にPMDAデータから削除されていた回収は対象外です。
+    </p>
+    <ul class="product-list" id="removedList"></ul>
   </div>
 
   <div class="card" id="invalidGtinCard" hidden>
@@ -260,41 +346,124 @@
       li.appendChild(a);
     }
 
-    var unresolved = [];
+    function buildProductLi(cls, recallNo, generalName, brandName, extraLineText) {
+      var li = document.createElement("li");
+
+      var recallLine = document.createElement("div");
+      recallLine.className = "recall-no";
+      recallLine.textContent = cls + ": " + recallNo;
+      li.appendChild(recallLine);
+
+      var generalLine = document.createElement("div");
+      generalLine.className = "general-name";
+      generalLine.textContent = "一般的名称: " + (generalName || "(不明)");
+      li.appendChild(generalLine);
+
+      var brandLine = document.createElement("div");
+      brandLine.className = "brand-name";
+      brandLine.appendChild(document.createTextNode("販売名: "));
+      var a = document.createElement("a");
+      a.href = detailUrl(recallNo);
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = brandName || "(不明。回収情報を見る)";
+      brandLine.appendChild(a);
+      li.appendChild(brandLine);
+
+      if (extraLineText) {
+        var extraLine = document.createElement("div");
+        extraLine.className = "general-name";
+        extraLine.textContent = extraLineText;
+        li.appendChild(extraLine);
+      }
+
+      return li;
+    }
+
+    // GTIN版CSVに収録されていない回収
+    var gtinMissing = [];
     meta.classes.forEach(function (c) {
-      (c.unresolvedRecalls || []).forEach(function (item) {
-        unresolved.push({ cls: c.class, recallNo: item.recallNo, generalName: item.generalName, brandName: item.brandName });
+      (c.gtinMissingRecalls || []).forEach(function (item) {
+        gtinMissing.push({ cls: c.class, recallNo: item.recallNo, generalName: item.generalName, brandName: item.brandName });
       });
     });
-    if (unresolved.length > 0) {
-      document.getElementById("unresolvedCard").hidden = false;
-      var list = document.getElementById("unresolvedList");
-      unresolved.forEach(function (item) {
-        var li = document.createElement("li");
+    if (gtinMissing.length > 0) {
+      document.getElementById("gtinMissingCard").hidden = false;
+      var gmList = document.getElementById("gtinMissingList");
+      gtinMissing.forEach(function (item) {
+        gmList.appendChild(buildProductLi(item.cls, item.recallNo, item.generalName, item.brandName));
+      });
+    }
 
-        var recallLine = document.createElement("div");
-        recallLine.className = "recall-no";
-        recallLine.textContent = item.cls + ": " + item.recallNo;
-        li.appendChild(recallLine);
+    // ロット・シリアルが両方空欄だった回収 ＋ 補完状況
+    var STATUS_LABEL = {
+      supplemented: { text: "補完成功", cls: "status-ok" },
+      unresolved: { text: "要確認", cls: "status-warn" },
+      excluded: { text: "対象外", cls: "status-removed" },
+    };
+    var bothBlank = [];
+    meta.classes.forEach(function (c) {
+      (c.supplementedRecalls || []).forEach(function (item) { bothBlank.push({ cls: c.class, status: "supplemented", item: item }); });
+      (c.unresolvedRecalls || []).forEach(function (item) { bothBlank.push({ cls: c.class, status: "unresolved", item: item }); });
+      (c.excludedUnresolvedRecalls || []).forEach(function (item) { bothBlank.push({ cls: c.class, status: "excluded", item: item }); });
+    });
+    if (bothBlank.length > 0) {
+      document.getElementById("bothBlankCard").hidden = false;
+      var bbRows = document.getElementById("bothBlankRows");
+      var statusOrder = { unresolved: 0, excluded: 1, supplemented: 2 };
+      bothBlank.sort(function (a, b) { return statusOrder[a.status] - statusOrder[b.status]; });
+      bothBlank.forEach(function (entry) {
+        var label = STATUS_LABEL[entry.status];
+        var tr = document.createElement("tr");
 
-        var generalLine = document.createElement("div");
-        generalLine.className = "general-name";
-        generalLine.textContent = "一般的名称: " + (item.generalName || "(不明)");
-        li.appendChild(generalLine);
+        var tdStatus = document.createElement("td");
+        var badge = document.createElement("span");
+        badge.className = "status-badge " + label.cls;
+        badge.textContent = label.text;
+        tdStatus.appendChild(badge);
+        tr.appendChild(tdStatus);
 
-        var brandLine = document.createElement("div");
-        brandLine.className = "brand-name";
-        brandLine.appendChild(document.createTextNode("販売名: "));
+        var tdRecall = document.createElement("td");
         var a = document.createElement("a");
-        a.href = detailUrl(item.recallNo);
+        a.href = detailUrl(entry.item.recallNo);
         a.target = "_blank";
         a.rel = "noopener";
-        a.textContent = item.brandName || "(不明。回収情報を見る)";
-        brandLine.appendChild(a);
-        li.appendChild(brandLine);
+        a.className = "src-link";
+        a.textContent = entry.cls + ": " + entry.item.recallNo;
+        tdRecall.appendChild(a);
+        tr.appendChild(tdRecall);
 
-        list.appendChild(li);
+        var tdGeneral = document.createElement("td");
+        tdGeneral.textContent = entry.item.generalName || "(不明)";
+        tr.appendChild(tdGeneral);
+
+        var tdBrand = document.createElement("td");
+        tdBrand.textContent = entry.item.brandName || "(不明)";
+        tr.appendChild(tdBrand);
+
+        bbRows.appendChild(tr);
       });
+    }
+
+    // 回収済み（PMDA提供データから削除）
+    var removedArchive = meta.removedArchive || [];
+    if (removedArchive.length > 0) {
+      document.getElementById("removedCard").hidden = false;
+      var rList = document.getElementById("removedList");
+      removedArchive.forEach(function (item) {
+        var removedDate = item.removedAt ? new Date(item.removedAt).toISOString().slice(0, 10) : "不明";
+        rList.appendChild(buildProductLi(item.class, item.recallNo, item.generalName, item.brandName, "削除検出日: " + removedDate + "　収録行数: " + item.rowCount));
+      });
+    }
+
+    var cumulativeNote = document.getElementById("cumulativeNote");
+    if (cumulativeNote) {
+      cumulativeNote.textContent = "累積版: " + (meta.cumulativeTotalRows || 0).toLocaleString() + "行（回収済み " + (meta.removedArchiveCount || 0) + "件分を含む）";
+    }
+
+    var trackingSinceEl = document.getElementById("historyTrackingSince");
+    if (trackingSinceEl && meta.trackingStartedAt) {
+      trackingSinceEl.textContent = new Date(meta.trackingStartedAt).toISOString().slice(0, 10);
     }
 
     var invalidGtins = [];
