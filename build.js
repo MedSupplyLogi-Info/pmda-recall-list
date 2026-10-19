@@ -176,6 +176,17 @@ function convertEraDateToYyyymmdd(raw) {
   return `${year}${month}${day}`;
 }
 
+// 「掲載年月日」列は "'2026/09/07 16:39:16" のような西暦スラッシュ表記（時刻や
+// 「情報提供の開始」等の付随文言が付くこともある）。先頭の年月日部分のみを抽出しyyyymmddに変換する。
+function convertSlashDateToYyyymmdd(raw) {
+  if (!raw) return null;
+  const normalized = toHalfWidth(raw);
+  const m = normalized.match(/([0-9]{4})\/([0-9]{1,2})\/([0-9]{1,2})/);
+  if (!m) return null;
+  const [, y, mo, d] = m;
+  return `${y}${mo.padStart(2, "0")}${d.padStart(2, "0")}`;
+}
+
 // 「A123～A130」のような英数字範囲表記を、共通の前後接頭辞・接尾辞を保ったまま展開する。
 // 数値部分が数字のみでない、範囲が逆転している、範囲が異常に大きい場合は null（展開しない＝安全側）。
 function expandAlnumRange(startStr, endStr, maxCount) {
@@ -355,6 +366,7 @@ async function processClass(cls) {
   const freeTextColIdx = detailHeader.indexOf("対象ロット、数量及び出荷時期");
   const detailNameColIdx = detailHeader.indexOf("一般的名称及び販売名");
   const detailDateColIdx = detailHeader.indexOf("回収開始日");
+  const detailPostDateColIdx = detailHeader.indexOf("掲載年月日");
   const detailByRecall = new Map();
   for (const r of detailData) detailByRecall.set(r[0], r);
 
@@ -384,10 +396,11 @@ async function processClass(cls) {
   }
 
   for (const r of gtinData) {
-    const [recallNo, , rawName, rawDate, gtinOuter, gtinSale, gtinPack, rawLot, rawSerial] = r;
+    const [recallNo, rawPostDate, rawName, rawDate, gtinOuter, gtinSale, gtinPack, rawLot, rawSerial] = r;
 
     const name = cleanText(rawName) || NODATA;
     const dateYmd = convertEraDateToYyyymmdd(rawDate) || NODATA;
+    const postDateYmd = convertSlashDateToYyyymmdd(rawPostDate) || NODATA;
 
     // チェックデジット不正なGTIN（実在するバーコードとして印字され得ない値）は、
     // GTIN未提供と同様に扱う（invalidChecksumGtinsに記録の上、行からは除外）。
@@ -412,7 +425,7 @@ async function processClass(cls) {
         const pairs = buildLotSerialPairs(resolved);
         for (const gtin of gtinList) {
           for (const [lotVal, serialVal] of pairs) {
-            taggedRows.push({ recallNo, row: [name, dateYmd, gtin, lotVal, serialVal] });
+            taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, lotVal, serialVal] });
           }
         }
         continue;
@@ -422,7 +435,7 @@ async function processClass(cls) {
     const lotOut = lot || NODATA;
     const serialOut = serial || NODATA;
     for (const gtin of gtinList) {
-      taggedRows.push({ recallNo, row: [name, dateYmd, gtin, lotOut, serialOut] });
+      taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, lotOut, serialOut] });
     }
   }
 
@@ -437,16 +450,17 @@ async function processClass(cls) {
 
     const name = cleanDetailName(detailRow[detailNameColIdx]) || NODATA;
     const dateYmd = convertEraDateToYyyymmdd(detailRow[detailDateColIdx]) || NODATA;
+    const postDateYmd = convertSlashDateToYyyymmdd(detailRow[detailPostDateColIdx]) || NODATA;
     const freeText = detailRow[freeTextColIdx];
     const resolved = resolveMissingCodes(freeText);
     recordBothBlank(recallNo, detailRow, freeText, resolved);
 
     if (resolved) {
       for (const [lotVal, serialVal] of buildLotSerialPairs(resolved)) {
-        taggedRows.push({ recallNo, row: [name, dateYmd, NODATA, lotVal, serialVal] });
+        taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, lotVal, serialVal] });
       }
     } else {
-      taggedRows.push({ recallNo, row: [name, dateYmd, NODATA, NODATA, NODATA] });
+      taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, NODATA, NODATA] });
     }
   }
 
@@ -536,7 +550,7 @@ async function main() {
     }
   }
 
-  const header = ["一般的名称及び販売名", "回収開始日", "GTIN", "ロット番号", "シリアル番号"];
+  const header = ["回収番号", "一般的名称及び販売名", "掲載年月日", "回収開始日", "GTIN", "ロット番号", "シリアル番号"];
   writeCsv(OUT_CSV, header, dedupedRows);
 
   // ---------- 履歴管理：PMDA提供データから消えた（＝回収済みと推定される）回収の検出 ----------
