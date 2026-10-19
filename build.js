@@ -292,7 +292,8 @@ function resolveMissingCodes(freeText) {
 // ・全ロット対応: 自由記述に「対象ロット：全ロット」等の明記があり、ロット非特定であることが
 //   PMDA側で既に確定しているため、確認の必要が無い。
 // ・ソフトウェア医療機器: 自由記述が「バージョン X.Y」形式のバージョン表記のみで構成されており、
-//   そもそもGTIN/ロット/シリアルという概念が存在しない製品と判断できる。
+//   当該製品についてはロット/シリアルではなくバージョンで管理されていると判断できる
+//   （GS1規格上はソフトウェアへのGTIN付与も可能であり、GTINが存在し得ないわけではない）。
 function isAllLotsNonSpecific(freeText) {
   if (!freeText) return false;
   return /全ロット/.test(toHalfWidth(freeText));
@@ -439,8 +440,8 @@ async function processClass(cls) {
     }
   }
 
-  // GTIN版に一件も対応行が無い回収（ソフトウェア製品やGTIN未登録製品）を、詳細版を正として補う。
-  // GTINは提供元データに存在しないため NODATA とし、自由記述からロット・シリアルの復元を試みる。
+  // GTIN版に一件も対応行が無い回収（GTIN内訳が未提出の製品、ソフトウェア医療機器等）を、詳細版を正として補う。
+  // PMDA提供データ側にGTIN情報が無いため NODATA とし、自由記述からロット・シリアルの復元を試みる。
   for (const detailRow of detailData) {
     const recallNo = detailRow[0];
     if (gtinRecallIds.has(recallNo)) continue;
