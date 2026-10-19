@@ -1,5 +1,7 @@
 data/recall_list_merged.csv
+data/recall_list_cumulative.csv
 data/meta.js
 data/build-log.json
 _site/
 node_modules/
+# data/history.json は回収済み検出のためコミットが必要なので除外しない
