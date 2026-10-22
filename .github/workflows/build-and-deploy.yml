@@ -28,6 +28,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+          # ランナーのキャッシュに頼らず、毎回Node.js公式の最新パッチ版を確認してから
+          # インストールする（セキュリティ修正版への追従を早めるため）。
+          check-latest: true
 
       - name: PMDAから最新データを取得しCSVを生成
         run: node build.js
