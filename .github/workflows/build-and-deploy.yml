@@ -2,8 +2,12 @@ name: Build recall CSV and deploy to Pages
 
 on:
   schedule:
-    # 毎日 09:00 JST (00:00 UTC) に実行
-    - cron: "0 0 * * *"
+    # 毎日 JST 05:10 (UTC 20:10、前日分) に実行。
+    # GitHub Actionsの定時実行はきっかり0分・0時台に集中すると混雑により
+    # 数十分〜数時間遅延することがあるため、キリの良い時刻を避けつつ、
+    # 実測の最大遅延（約2時間48分）を踏まえて09:00の利用開始までに
+    # 確実に完了するよう余裕を持たせている。
+    - cron: "10 20 * * *"
   workflow_dispatch: {}
   push:
     branches: [main]
