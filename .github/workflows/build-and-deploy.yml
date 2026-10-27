@@ -1,14 +1,9 @@
 name: Build recall CSV and deploy to Pages
 
-# 【2026-10-25 サイト一時閉鎖中】
-# サイバー攻撃への予防的措置として、公開ページをメンテナンス通知のみにしています。
-# それに伴い、毎日の自動実行（schedule）は一時停止中です。再開する場合は、
-# 下記 schedule セクションのコメントを解除し、「公開用ディレクトリを構成」ステップで
-# data/ 以下のファイルを再度 _site/data にコピーするよう戻してください。
 on:
-  # schedule:
-  #   # 毎日 09:00 JST (00:00 UTC) に実行
-  #   - cron: "0 0 * * *"
+  schedule:
+    # 毎日 09:00 JST (00:00 UTC) に実行
+    - cron: "0 0 * * *"
   workflow_dispatch: {}
   push:
     branches: [main]
@@ -52,10 +47,14 @@ jobs:
             git push
           fi
 
-      - name: 公開用ディレクトリを構成（閉鎖中はメンテナンス通知のみ公開・CSVは非公開）
+      - name: 公開用ディレクトリを構成
         run: |
-          mkdir -p _site
+          mkdir -p _site/data
           cp index.html _site/index.html
+          cp data/recall_list_merged.csv _site/data/recall_list_merged.csv
+          cp data/recall_list_cumulative.csv _site/data/recall_list_cumulative.csv
+          cp data/meta.js _site/data/meta.js
+          cp data/build-log.json _site/data/build-log.json
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
