@@ -177,6 +177,7 @@
   <div class="card">
     <h2>ダウンロード</h2>
     <p id="genDate" class="meta-line">生成日時: 読み込み中...</p>
+    <p id="logicVersion" class="meta-line"></p>
     <div class="stat-row" id="statRow"></div>
     <div class="download-row">
       <a class="download-btn" href="data/recall_list_merged.csv" download="PMDA医療機器回収リスト_統合.csv">
@@ -329,6 +330,7 @@
     var pad = function (n) { return String(n).padStart(2, "0"); };
     var formatted = d.getFullYear() + "/" + pad(d.getMonth() + 1) + "/" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
     document.getElementById("genDate").textContent = "生成日時: " + formatted + "（日本時間換算ではなくローカル環境の時刻表示）";
+    document.getElementById("logicVersion").textContent = "CSV生成ロジック: ver." + (meta.buildLogicVersion || "不明");
 
     var statRow = document.getElementById("statRow");
     var totalStat = document.createElement("div");
