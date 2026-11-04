@@ -15,9 +15,13 @@ const OUT_CUMULATIVE_CSV = path.join(OUT_DIR, "recall_list_cumulative.csv");
 const OUT_HISTORY = path.join(OUT_DIR, "history.json");
 const OUT_LOG = path.join(OUT_DIR, "build-log.json");
 const OUT_META_JS = path.join(OUT_DIR, "meta.js");
-const NODATA = "NODATA"; // 空欄セルであることを示す固定コード
+const NODATA = "NODATA"; // 空欄セルであることを示す固定コード（値が存在しない・不明な場合）
+// 「全ロット対象」等、自由記述上ロットが非特定（＝回収対象が特定ロットに限定されない）と
+// 明記されている場合のロット番号欄の固定コード。NODATA（値が不明・欠落）とは意味が異なり、
+// 機械的に「全ロット対象の回収である」と判別できるようにするためのマーカー。
+const ALL_LOTS_MARKER = "ALLLOTS";
 // CSV生成ロジックのバージョン。網羅性・正確性・完全性等の判定ロジックや出力列構成を変更した場合はここを更新する。
-const BUILD_LOGIC_VERSION = "1.1";
+const BUILD_LOGIC_VERSION = "1.2";
 const STATUS_COL = "状態";
 const STATUS_ACTIVE = "現行";
 const STATUS_REMOVED = "回収済み（PMDA提供データから削除）";
@@ -394,9 +398,6 @@ function looksLikeSoftwareVersioning(freeText) {
   if (!freeText) return false;
   return /バージョン\s*[0-9]+(\.[0-9]+)+/.test(toHalfWidth(freeText));
 }
-function shouldSkipUnresolvedReport(freeText) {
-  return isAllLotsNonSpecific(freeText) || looksLikeSoftwareVersioning(freeText);
-}
 
 // resolveMissingCodes の結果から [ロット番号, シリアル番号] の組を組み立てる。
 // ラベルから確実に判別できた場合（confident=true）は該当する列だけを埋めた1パターンのみ。
@@ -489,15 +490,20 @@ async function processClass(cls) {
   function recordBothBlank(recallNo, detailRow, freeText, resolved) {
     const { generalName, brandName } = splitGeneralAndBrandName(detailRow ? detailRow[detailNameColIdx] : "");
     let status;
+    let reason;
     if (resolved) {
       status = "supplemented";
       if (!resolved.confident) ambiguousTypeRecalls.add(recallNo);
-    } else if (shouldSkipUnresolvedReport(freeText)) {
+    } else if (isAllLotsNonSpecific(freeText)) {
       status = "excluded";
+      reason = "all_lots"; // 全ロット対象（ロット番号欄はALL_LOTS_MARKERで機械判別可能）
+    } else if (looksLikeSoftwareVersioning(freeText)) {
+      status = "excluded";
+      reason = "software"; // ソフトウェア医療機器（バージョン管理のためロット/シリアルの概念が無く、NODATAが適切）
     } else {
       status = "unresolved";
     }
-    bothBlankRecalls.set(recallNo, { recallNo, generalName, brandName, status });
+    bothBlankRecalls.set(recallNo, { recallNo, generalName, brandName, status, reason });
   }
 
   // ロット・シリアル両方欠落の回収は、自由記述の解析結果を回収番号単位でキャッシュする
@@ -510,8 +516,9 @@ async function processClass(cls) {
     const freeText = detailRow ? detailRow[freeTextColIdx] : null;
     const resolved = resolveMissingCodes(freeText);
     recordBothBlank(recallNo, detailRow, freeText, resolved);
-    resolvedCacheByRecall.set(recallNo, resolved);
-    return resolved;
+    const info = { resolved, isAllLots: !resolved && isAllLotsNonSpecific(freeText) };
+    resolvedCacheByRecall.set(recallNo, info);
+    return info;
   }
 
   for (const r of gtinData) {
@@ -536,13 +543,21 @@ async function processClass(cls) {
     let serial = sanitizeLotSerial(rawSerial);
 
     if (!lot && !serial && recallAllBlank.get(recallNo)) {
-      const resolved = getResolvedForRecall(recallNo);
+      const { resolved, isAllLots } = getResolvedForRecall(recallNo);
       if (resolved) {
         const pairs = buildLotSerialPairs(resolved);
         for (const gtin of gtinList) {
           for (const [lotVal, serialVal] of pairs) {
             taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, lotVal, serialVal] });
           }
+        }
+        continue;
+      }
+      if (isAllLots) {
+        // 「全ロット対象」等、ロットが非特定であることが自由記述上明記されている場合は、
+        // 単なる欠落（NODATA）と区別できるよう、ロット番号欄に専用マーカーを出力する。
+        for (const gtin of gtinList) {
+          taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, ALL_LOTS_MARKER, NODATA] });
         }
         continue;
       }
@@ -575,7 +590,12 @@ async function processClass(cls) {
       for (const [lotVal, serialVal] of buildLotSerialPairs(resolved)) {
         taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, lotVal, serialVal] });
       }
+    } else if (isAllLotsNonSpecific(freeText)) {
+      // 「全ロット対象」等、ロットが非特定であることが自由記述上明記されている場合は、
+      // 単なる欠落（NODATA）と区別できるよう、ロット番号欄に専用マーカーを出力する。
+      taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, ALL_LOTS_MARKER, NODATA] });
     } else {
+      // ソフトウェア医療機器等（ロット/シリアルの概念自体が無い場合を含む）はNODATAのままとする。
       taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, NODATA, NODATA] });
     }
   }
