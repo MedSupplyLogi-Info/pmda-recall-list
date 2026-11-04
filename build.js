@@ -21,7 +21,7 @@ const NODATA = "NODATA"; // 空欄セルであることを示す固定コード�
 // 機械的に「全ロット対象の回収である」と判別できるようにするためのマーカー。
 const ALL_LOTS_MARKER = "ALLLOTS";
 // CSV生成ロジックのバージョン。網羅性・正確性・完全性等の判定ロジックや出力列構成を変更した場合はここを更新する。
-const BUILD_LOGIC_VERSION = "1.3";
+const BUILD_LOGIC_VERSION = "1.4";
 const STATUS_COL = "状態";
 const STATUS_ACTIVE = "現行";
 const STATUS_REMOVED = "回収済み（PMDA提供データから削除）";
@@ -432,6 +432,51 @@ function extractEnumeratedCodesFromFreeText(freeText) {
   return unique.length >= 5 ? unique : [];
 }
 
+// プログラム医療機器（ソフトウェア）の個体管理ID・バージョンの抽出（ID/バージョン列用）。
+// プログラム医療機器であっても個体ごとにGTIN・ロット・シリアルが付与されている製品も
+// 多数存在するため「ロット・シリアルの概念がない」と断定はできない。一方で、実データ上、
+// 個体管理IDが「のID：」等（LOT_LABELS/SERIAL_LABELSには含まれない見出し語）に続く形で
+// 記載されている製品や、バージョン番号単位でのみ出荷数量が管理されている製品が確認されている。
+// これらはGTIN付きバーコードと直接対応する識別体系ではないため、ロット番号・シリアル番号とは
+// 別の専用列（ID/バージョン）に出力する。
+const PROGRAM_ID_STOP_PATTERN = /(出荷数量|出荷時期及び数量|アプリケーション公開時期|製造数量|出荷時期)[^\n:：]{0,20}[:：]/g;
+
+function extractProgramIds(freeText) {
+  if (!freeText) return [];
+  const normalized = toHalfWidth(freeText);
+  const m = normalized.match(/ID[:：]/);
+  if (!m) return [];
+  const afterIdx = m.index + m[0].length;
+  let segEnd = normalized.length;
+  PROGRAM_ID_STOP_PATTERN.lastIndex = 0;
+  let sm;
+  while ((sm = PROGRAM_ID_STOP_PATTERN.exec(normalized))) {
+    if (sm.index > afterIdx) { segEnd = sm.index; break; }
+  }
+  const segment = normalized.slice(afterIdx, segEnd);
+  const tokens = segment.split(/[,、，\s　\n･・]+/).filter(Boolean);
+  const ids = tokens.filter((t) => /^[0-9A-Za-z]{4,20}$/.test(t));
+  return [...new Set(ids)];
+}
+
+function extractProgramVersions(freeText) {
+  if (!freeText) return [];
+  const normalized = toHalfWidth(freeText);
+  const matches = normalized.match(/バージョン\s*[0-9]+(?:\.[0-9]+)*/g) || [];
+  return [...new Set(matches.map((s) => s.replace(/\s+/g, "")))];
+}
+
+// ロット・シリアルが両方欠落し自由記述からも復元できない場合の最終フォールバック。
+// 個体管理ID（信頼度：高、個体ごとに異なる値のため）を優先し、無ければバージョン番号
+// （信頼度：中、複数個体が同一バージョンを共有するため個体識別力は低い）を採用する。
+function resolveProgramIdOrVersion(freeText) {
+  const ids = extractProgramIds(freeText);
+  if (ids.length > 0) return { type: "id", codes: ids };
+  const versions = extractProgramVersions(freeText);
+  if (versions.length > 0) return { type: "version", codes: versions };
+  return null;
+}
+
 // ロット・シリアルが両方欠落している場合に、自由記述から補完を試みる統一エントリポイント。
 // 戻り値: { type: "lot"|"serial", codes: string[], confident: boolean } または見つからなければ null。
 //
@@ -582,7 +627,9 @@ async function processClass(cls) {
     const freeText = detailRow ? detailRow[freeTextColIdx] : null;
     const resolved = resolveMissingCodes(freeText);
     recordBothBlank(recallNo, detailRow, freeText, resolved);
-    const info = { resolved, isAllLots: !resolved && isAllLotsNonSpecific(freeText) };
+    const isAllLots = !resolved && isAllLotsNonSpecific(freeText);
+    const programInfo = !resolved && !isAllLots ? resolveProgramIdOrVersion(freeText) : null;
+    const info = { resolved, isAllLots, programInfo };
     resolvedCacheByRecall.set(recallNo, info);
     return info;
   }
@@ -609,12 +656,12 @@ async function processClass(cls) {
     let serial = sanitizeLotSerial(rawSerial);
 
     if (!lot && !serial && recallAllBlank.get(recallNo)) {
-      const { resolved, isAllLots } = getResolvedForRecall(recallNo);
+      const { resolved, isAllLots, programInfo } = getResolvedForRecall(recallNo);
       if (resolved) {
         const pairs = buildLotSerialPairs(resolved);
         for (const gtin of gtinList) {
           for (const [lotVal, serialVal] of pairs) {
-            taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, lotVal, serialVal] });
+            taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, lotVal, serialVal, NODATA] });
           }
         }
         continue;
@@ -623,7 +670,16 @@ async function processClass(cls) {
         // 「全ロット対象」等、ロットが非特定であることが自由記述上明記されている場合は、
         // 単なる欠落（NODATA）と区別できるよう、ロット番号欄に専用マーカーを出力する。
         for (const gtin of gtinList) {
-          taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, ALL_LOTS_MARKER, NODATA] });
+          taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, ALL_LOTS_MARKER, NODATA, NODATA] });
+        }
+        continue;
+      }
+      if (programInfo) {
+        // プログラム医療機器の個体管理ID・バージョンをID/バージョン列に出力する。
+        for (const gtin of gtinList) {
+          for (const code of programInfo.codes) {
+            taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, NODATA, NODATA, code] });
+          }
         }
         continue;
       }
@@ -632,7 +688,7 @@ async function processClass(cls) {
     const lotOut = lot || NODATA;
     const serialOut = serial || NODATA;
     for (const gtin of gtinList) {
-      taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, lotOut, serialOut] });
+      taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, lotOut, serialOut, NODATA] });
     }
   }
 
@@ -654,15 +710,22 @@ async function processClass(cls) {
 
     if (resolved) {
       for (const [lotVal, serialVal] of buildLotSerialPairs(resolved)) {
-        taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, lotVal, serialVal] });
+        taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, lotVal, serialVal, NODATA] });
       }
     } else if (isAllLotsNonSpecific(freeText)) {
       // 「全ロット対象」等、ロットが非特定であることが自由記述上明記されている場合は、
       // 単なる欠落（NODATA）と区別できるよう、ロット番号欄に専用マーカーを出力する。
-      taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, ALL_LOTS_MARKER, NODATA] });
+      taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, ALL_LOTS_MARKER, NODATA, NODATA] });
     } else {
-      // ソフトウェア医療機器等（ロット/シリアルの概念自体が無い場合を含む）はNODATAのままとする。
-      taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, NODATA, NODATA] });
+      // プログラム医療機器の個体管理ID・バージョンをID/バージョン列に出力する（無ければNODATA）。
+      const programInfo = resolveProgramIdOrVersion(freeText);
+      if (programInfo) {
+        for (const code of programInfo.codes) {
+          taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, NODATA, NODATA, code] });
+        }
+      } else {
+        taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, NODATA, NODATA, NODATA] });
+      }
     }
   }
 
@@ -802,7 +865,7 @@ async function main() {
     }
   }
 
-  const header = ["回収番号", "一般的名称及び販売名", "掲載年月日", "回収開始日", "GTIN", "ロット番号", "シリアル番号"];
+  const header = ["回収番号", "一般的名称及び販売名", "掲載年月日", "回収開始日", "GTIN", "ロット番号", "シリアル番号", "ID/バージョン"];
   writeCsv(OUT_CSV, header, dedupedRows);
 
   // ---------- 履歴管理：PMDA提供データから消えた（＝回収済みと推定される）回収の検出 ----------
