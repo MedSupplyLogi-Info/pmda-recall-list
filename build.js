@@ -132,7 +132,7 @@ function unzipFirstFile(buf) {
 // ---------- CSVパース（引用符内改行対応） ----------
 
 function parseCSV(text) {
-  text = text.replace(/^﻿/, ""); // 先頭のBOM（byte order mark）を除去
+  text = text.replace(/^\uFEFF/, ""); // 先頭のBOM（byte order mark）を除去
   const rows = [];
   let row = [];
   let field = "";
@@ -318,7 +318,9 @@ function extractEnumeratedCodesFromFreeText(freeText) {
   // \b（単語境界）は半角英数字・アンダースコアとそれ以外の境界にしかマッチしないため、
   // "Lot12345678" のように数字の直前が半角英字の場合に抽出漏れが起こる。
   // 否定先読み・否定後読みで「前後が半角英数字でない」ことを直接確認する。
-  const tokens = normalized.match(/(?<![0-9A-Za-z])[0-9]{6,14}(?![0-9A-Za-z])/g) || [];
+  // ハイフンも境界除外文字に含め、"20260101-123456" のような連結番号が
+  // 意図せず2つの数字列に分断・誤抽出されることを防ぐ（安全側）。
+  const tokens = normalized.match(/(?<![0-9A-Za-z-])[0-9]{6,14}(?![0-9A-Za-z-])/g) || [];
   const unique = [...new Set(tokens)];
   return unique.length >= 5 ? unique : [];
 }
@@ -461,6 +463,20 @@ async function processClass(cls) {
     bothBlankRecalls.set(recallNo, { recallNo, generalName, brandName, status });
   }
 
+  // ロット・シリアル両方欠落の回収は、自由記述の解析結果を回収番号単位でキャッシュする
+  // （1つの回収に複数GTIN等で複数行ある場合、同じ自由記述を行ごとに毎回パースし直す
+  // 無駄な再計算を避けるため）。
+  const resolvedCacheByRecall = new Map();
+  function getResolvedForRecall(recallNo) {
+    if (resolvedCacheByRecall.has(recallNo)) return resolvedCacheByRecall.get(recallNo);
+    const detailRow = detailByRecall.get(recallNo);
+    const freeText = detailRow ? detailRow[freeTextColIdx] : null;
+    const resolved = resolveMissingCodes(freeText);
+    recordBothBlank(recallNo, detailRow, freeText, resolved);
+    resolvedCacheByRecall.set(recallNo, resolved);
+    return resolved;
+  }
+
   for (const r of gtinData) {
     const [recallNo, rawPostDate, rawName, rawDate, gtinOuter, gtinSale, gtinPack, rawLot, rawSerial] = r;
 
@@ -483,10 +499,7 @@ async function processClass(cls) {
     let serial = sanitizeLotSerial(rawSerial);
 
     if (!lot && !serial && recallAllBlank.get(recallNo)) {
-      const detailRow = detailByRecall.get(recallNo);
-      const freeText = detailRow ? detailRow[freeTextColIdx] : null;
-      const resolved = resolveMissingCodes(freeText);
-      recordBothBlank(recallNo, detailRow, freeText, resolved);
+      const resolved = getResolvedForRecall(recallNo);
       if (resolved) {
         const pairs = buildLotSerialPairs(resolved);
         for (const gtin of gtinList) {
@@ -563,6 +576,7 @@ async function processClass(cls) {
 
   return {
     outputRows,
+    rawRowCount: taggedRows.length, // クラス内重複除去前の行数（duplicatesRemoved集計用）
     recallRowsMap,
     supplementedRecalls: supplemented,
     unresolvedRecalls: unresolved,
@@ -590,7 +604,7 @@ function toCsvField(v) {
 function writeCsv(filePath, header, rows) {
   const lines = [header.map(toCsvField).join(",")];
   for (const row of rows) lines.push(row.map(toCsvField).join(","));
-  fs.writeFileSync(filePath, "﻿" + lines.join("\r\n") + "\r\n", "utf8"); // 先頭にBOMを付与（Excelでの文字コード誤認識対策）
+  fs.writeFileSync(filePath, "\uFEFF" + lines.join("\r\n") + "\r\n", "utf8"); // 先頭にBOMを付与（Excelでの文字コード誤認識対策）
 }
 
 // 前回実行時点のスナップショット（history.json）を読み込む。初回実行時は存在しない。
@@ -632,11 +646,13 @@ async function main() {
   const allRows = [];
   const summary = [];
   const allRecallRowsMap = new Map(); // 回収番号 -> {recallNo, class, generalName, brandName, rows}
+  let rawRowCountTotal = 0; // 各クラスの重複除去前の行数の合計（duplicatesRemoved集計用）
 
   for (const cls of CLASSES) {
     const result = await processClass(cls);
     checkForAnomalousDrop(cls.label, prevCountByClass.get(cls.label) || 0, result.recallCount);
     allRows.push(...result.outputRows);
+    rawRowCountTotal += result.rawRowCount;
     for (const [recallNo, info] of result.recallRowsMap) allRecallRowsMap.set(recallNo, info);
     summary.push({
       class: cls.label,
@@ -716,7 +732,9 @@ async function main() {
     buildLogicVersion: BUILD_LOGIC_VERSION,
     generatedAt: nowIso,
     totalRows: dedupedRows.length,
-    duplicatesRemoved: allRows.length - dedupedRows.length,
+    // クラス内重複除去（processClass内）＋クラス横断重複除去（本関数内）の合計。
+    // rawRowCountTotalは各クラスの重複除去前の行数の合計。
+    duplicatesRemoved: rawRowCountTotal - dedupedRows.length,
     nodataMarker: NODATA,
     cumulativeTotalRows: cumulativeRows.length,
     removedArchiveCount: removedArchiveList.length,
