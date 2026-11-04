@@ -230,9 +230,11 @@
       <li>クラスIII: <a class="src-link" href="https://www.info.pmda.go.jp/kaisyuu/rcidx26-3k.html" target="_blank" rel="noopener">rcidx26-3k.html</a></li>
     </ul>
     <p class="meta-line">
-      各ページのGTIN付きCSVを基に、回収開始日欄が構造化データ上ロット・シリアル番号とも空欄の場合のみ、
-      同ページの詳細CSV内「対象ロット、数量及び出荷時期」欄から列挙情報を自動抽出して補完しています
-      （「全ロット」等ロット非特定と明記されている場合や、抽出候補が5件未満の場合は補完せず NODATA のままとしています）。
+      各ページのGTIN付きCSVでロット番号・シリアル番号が両方とも空欄の回収についてのみ、
+      同ページの詳細CSV内「対象ロット、数量及び出荷時期」欄から列挙情報を自動抽出して補完しています。
+      「対象ロット：」等のラベルから特定できた場合は1件からでも補完しますが、ラベルが無く全文から
+      数字列を推測抽出する場合（抽出候補が5件未満）や、「全ロット」等ロット非特定と明記されている場合は、
+      誤検出を防ぐため補完せず NODATA のままとしています。
     </p>
   </div>
 
@@ -308,8 +310,8 @@
   <div class="card">
     <h2>データの更新について</h2>
     <p class="meta-line">
-      毎朝9:00（日本時間）に、GitHub Actions上のプログラムが自動的にPMDAサイトから最新情報を取得し、
-      CSVを再生成・再公開しています。手動での更新作業は不要です。
+      毎朝5時台（日本時間）に、GitHub Actions上のプログラムが自動的にPMDAサイトから最新情報を取得し、
+      CSVを再生成・再公開しています（毎朝9:00の利用開始までに完了するよう設定）。手動での更新作業は不要です。
     </p>
     <p class="meta-line">
       取得対象は<strong>当該年度（令和8年度）に掲載された回収情報のみ</strong>です。過去の年度分は含まれていません。
@@ -328,6 +330,13 @@
     }
     var d = new Date(meta.generatedAt);
     var pad = function (n) { return String(n).padStart(2, "0"); };
+    // toISOString().slice(0,10) はUTCの日付を返すため、日本時間早朝（UTC前日15時〜23時台）に
+    // 生成されたタイムスタンプではローカル環境の日付より1日早く表示されてしまう。
+    // ローカル環境のタイムゾーンでの年月日を組み立てて表示する。
+    var formatLocalDate = function (iso) {
+      var dt = new Date(iso);
+      return dt.getFullYear() + "-" + pad(dt.getMonth() + 1) + "-" + pad(dt.getDate());
+    };
     var formatted = d.getFullYear() + "/" + pad(d.getMonth() + 1) + "/" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
     document.getElementById("genDate").textContent = "生成日時: " + formatted + "（日本時間換算ではなくローカル環境の時刻表示）";
     document.getElementById("logicVersion").textContent = "CSV生成ロジック: ver." + (meta.buildLogicVersion || "不明");
@@ -464,7 +473,7 @@
       document.getElementById("removedEmptyNote").hidden = true;
       var rList = document.getElementById("removedList");
       removedArchive.forEach(function (item) {
-        var removedDate = item.removedAt ? new Date(item.removedAt).toISOString().slice(0, 10) : "不明";
+        var removedDate = item.removedAt ? formatLocalDate(item.removedAt) : "不明";
         var extra = "削除検出日: " + removedDate + "　収録行数: " + item.rowCount;
         if (item.note) extra += "　※" + item.note;
         rList.appendChild(buildProductLi(item.class, item.recallNo, item.generalName, item.brandName, extra));
@@ -478,7 +487,7 @@
 
     var trackingSinceEl = document.getElementById("historyTrackingSince");
     if (trackingSinceEl && meta.trackingStartedAt) {
-      trackingSinceEl.textContent = new Date(meta.trackingStartedAt).toISOString().slice(0, 10);
+      trackingSinceEl.textContent = formatLocalDate(meta.trackingStartedAt);
     }
 
     var invalidGtins = [];

@@ -44,11 +44,19 @@ jobs:
       - name: 失敗時にGitHub Issueで通知（安全な通信・信頼ソース確認・異常検知のいずれかで中断した場合）
         if: failure() && steps.build_csv.outcome == 'failure'
         run: |
-          gh issue create \
-            --title "CSVビルド失敗: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --body "PMDAからのデータ取得・検証に失敗したため、公開データの更新を中断しました。詳細はActionsログを確認してください。
+          # PMDA側の障害が連日続いた場合に同種のIssueが乱立しないよう、
+          # 既存のオープンIssueがあればコメントを追加し、無ければ新規作成する。
+          EXISTING=$(gh issue list --state open --search "CSVビルド失敗 in:title" --json number --jq '.[0].number')
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if [ -z "$EXISTING" ]; then
+            gh issue create \
+              --title "CSVビルド失敗: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --body "PMDAからのデータ取得・検証に失敗したため、公開データの更新を中断しました。詳細はActionsログを確認してください。
 
-          実行ログ: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          実行ログ: $RUN_URL"
+          else
+            gh issue comment "$EXISTING" --body "本日も同様の原因でビルドに失敗しました。実行ログ: $RUN_URL"
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -61,6 +69,9 @@ jobs:
             echo "履歴に変更なし"
           else
             git commit -m "Update recall history [skip ci]"
+            # 実行中に別のpushが入っていた場合に備え、rebaseしてから push する
+            # （concurrency設定でジョブが順番待ちするため、連続実行時に起こり得る）。
+            git pull --rebase origin main
             git push
           fi
 
