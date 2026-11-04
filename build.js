@@ -304,12 +304,23 @@ const SERIAL_LABELS = ["シリアル番号", "製造番号"];
 // 上記ラベルの後に続く値の手前で自由記述を区切るための「次の見出し」一覧
 const STOP_LABELS = [...LOT_LABELS, ...SERIAL_LABELS, "製品コード", "製品番号", "数量", "出荷数量", "製造数量", "出荷時期", "出荷年月日", "対象製品", "販売名", "一般的名称"];
 
+// 「全ロット対象」等、ロットが非特定であることを示す表現。実データ調査では「全ロット」以外の
+// 表現は確認されていないが（2026年11月時点）、将来PMDA側の記述が変わった場合に備え、
+// 意味が明確で誤検出リスクの低い表現のみを追加している（「全数」「全量」等、数量一般を
+// 指す語は無関係な文脈でも頻出するため意図的に含めていない）。
+const ALL_LOTS_PATTERNS = [/全ロット/, /すべてのロット/, /全てのロット/, /全製造番号/];
+function matchesAllLotsPattern(normalizedText) {
+  return ALL_LOTS_PATTERNS.some((re) => re.test(normalizedText));
+}
+
 // 自由記述中の「シリアル番号：」「製造番号：」等のラベルを目印に値を抽出する（ラベル起点なので短い値・単一値でも信頼できる）。
-// ラベルが見つからない場合は resolveMissingCodes 側で旧方式（全文からの数字列挙抽出）にフォールバックする。
-function extractLabeledCodes(freeText) {
+// ラベルの直後が「：」で区切られている、最も一般的な書式に対応する（厳格版）。
+// ここで何も見つからない場合は extractLabeledCodesLoose（区切り文字の異なる書式向け）、
+// さらに見つからない場合は resolveMissingCodes 側で旧方式（全文からの数字列挙抽出）にフォールバックする。
+function extractLabeledCodesStrict(freeText) {
   if (!freeText) return { lot: [], serial: [] };
   const normalized = toHalfWidth(freeText);
-  if (/全ロット/.test(normalized)) return { lot: [], serial: [] }; // 明示的に「全ロット」＝ロット非特定
+  if (matchesAllLotsPattern(normalized)) return { lot: [], serial: [] }; // 明示的に「全ロット」等＝ロット非特定
 
   const labelPattern = new RegExp(`(${[...LOT_LABELS, ...SERIAL_LABELS].join("|")})[^\\n:：]{0,20}[:：]`, "g");
   const stopPattern = new RegExp(`(${STOP_LABELS.join("|")})[^\\n:：]{0,20}[:：]`, "g");
@@ -350,12 +361,67 @@ function extractLabeledCodes(freeText) {
   return result;
 }
 
+// ラベルの直後が「：」ではなく「ロットNo.(C1)」のような句点＋括弧書き、または
+// 「製造番号\nSBM100...〜SBM200...」のような改行区切りになっている書式向けのフォールバック。
+// extractLabeledCodesStrict で何も見つからなかった場合のみ呼ばれるため、
+// 既に正しく抽出できている既存の挙動には影響しない（追加検出のみ）。
+function extractLabeledCodesLoose(freeText) {
+  const result = { lot: [], serial: [] };
+  if (!freeText) return result;
+  const normalized = toHalfWidth(freeText);
+  if (matchesAllLotsPattern(normalized)) return result;
+
+  const allLabels = [...LOT_LABELS, ...SERIAL_LABELS];
+  const labelPattern = new RegExp(`(${allLabels.join("|")})`, "g");
+  const stopLabelPattern = new RegExp(`^(${STOP_LABELS.join("|")})`);
+
+  let m;
+  while ((m = labelPattern.exec(normalized))) {
+    const label = m[1];
+    const after = normalized.slice(m.index + m[0].length, m.index + m[0].length + 80);
+
+    // パターンA:「ラベル.(値)」「ラベル(値)」のように句点・括弧で値を囲む書式
+    const parenMatch = after.match(/^[.．]?\s*[(（]([^)）]{1,40})[)）]/);
+    // パターンB: ラベル直後が改行で、次の行に値がある書式（次行が別の見出し語で始まる場合は除外）
+    const lineMatch = after.match(/^[ \t]*\r?\n[ \t]*([^\n]{1,60})/);
+
+    let segment = null;
+    if (parenMatch) segment = parenMatch[1];
+    else if (lineMatch && !stopLabelPattern.test(lineMatch[1])) segment = lineMatch[1];
+    if (!segment) continue;
+
+    const codes = [];
+    const chunks = segment.split(/[,、，\s　\n･・]+/).filter(Boolean);
+    for (const chunk of chunks) {
+      const rangeMatch = chunk.match(/^([0-9A-Za-z-]{2,20})[～~〜]([0-9A-Za-z-]{2,20})$/);
+      if (rangeMatch) {
+        const expanded = expandAlnumRange(rangeMatch[1], rangeMatch[2], 5000);
+        if (expanded) { codes.push(...expanded); continue; }
+      }
+      const token = chunk.replace(/^[()（）]+|[()（）]+$/g, "");
+      if (/^[0-9A-Za-z-]{2,20}$/.test(token)) codes.push(token);
+    }
+    if (codes.length === 0) continue;
+    if (SERIAL_LABELS.includes(label)) result.serial.push(...codes);
+    else result.lot.push(...codes);
+  }
+  result.lot = [...new Set(result.lot)];
+  result.serial = [...new Set(result.serial)];
+  return result;
+}
+
+function extractLabeledCodes(freeText) {
+  const strict = extractLabeledCodesStrict(freeText);
+  if (strict.lot.length > 0 || strict.serial.length > 0) return strict;
+  return extractLabeledCodesLoose(freeText);
+}
+
 // 旧方式：ラベルの目印が無い自由記述向けのフォールバック。全文から6〜14桁の数字列を拾い、
 // 誤検出を避けるため5件以上の列挙が確認できた場合のみ採用する。
 function extractEnumeratedCodesFromFreeText(freeText) {
   if (!freeText) return [];
   const normalized = toHalfWidth(freeText);
-  if (/全ロット/.test(normalized)) return [];
+  if (matchesAllLotsPattern(normalized)) return [];
   // \b（単語境界）は半角英数字・アンダースコアとそれ以外の境界にしかマッチしないため、
   // "Lot12345678" のように数字の直前が半角英字の場合に抽出漏れが起こる。
   // 否定先読み・否定後読みで「前後が半角英数字でない」ことを直接確認する。
@@ -392,7 +458,7 @@ function resolveMissingCodes(freeText) {
 //   （GS1規格上はソフトウェアへのGTIN付与も可能であり、GTINが存在し得ないわけではない）。
 function isAllLotsNonSpecific(freeText) {
   if (!freeText) return false;
-  return /全ロット/.test(toHalfWidth(freeText));
+  return matchesAllLotsPattern(toHalfWidth(freeText));
 }
 function looksLikeSoftwareVersioning(freeText) {
   if (!freeText) return false;
