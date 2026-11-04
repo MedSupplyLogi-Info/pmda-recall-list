@@ -2,7 +2,8 @@
 //
 // 実行方法: node build.js
 // PMDAサイトから最新のCSVを取得し、data/recall_list_merged.csv を再生成する。
-// PMDA側のURLが年度更新される場合は下記 CLASSES の baseUrl を書き換えること。
+// PMDA側のURLが年度更新される場合は下記 FISCAL_YEAR_CODE を書き換えること
+// （例年、年度替わり前後にPMDA側のファイル名が rcidx<新年度コード>-... に変わる）。
 
 const fs = require("fs");
 const path = require("path");
@@ -21,21 +22,24 @@ const STATUS_COL = "状態";
 const STATUS_ACTIVE = "現行";
 const STATUS_REMOVED = "回収済み（PMDA提供データから削除）";
 
+// PMDAのファイル名に含まれる年度コード（令和8年度 = "26"）。年度替わり時はここだけ書き換える。
+const FISCAL_YEAR_CODE = "26";
+
 const CLASSES = [
   {
     label: "クラスI",
-    gtinZipUrl: "https://www.info.pmda.go.jp/kaisyuu/rcidx26-1k2_all.zip",
-    detailZipUrl: "https://www.info.pmda.go.jp/kaisyuu/rcidx26-1k_all.zip",
+    gtinZipUrl: `https://www.info.pmda.go.jp/kaisyuu/rcidx${FISCAL_YEAR_CODE}-1k2_all.zip`,
+    detailZipUrl: `https://www.info.pmda.go.jp/kaisyuu/rcidx${FISCAL_YEAR_CODE}-1k_all.zip`,
   },
   {
     label: "クラスII",
-    gtinZipUrl: "https://www.info.pmda.go.jp/kaisyuu/rcidx26-2k2_all.zip",
-    detailZipUrl: "https://www.info.pmda.go.jp/kaisyuu/rcidx26-2k_all.zip",
+    gtinZipUrl: `https://www.info.pmda.go.jp/kaisyuu/rcidx${FISCAL_YEAR_CODE}-2k2_all.zip`,
+    detailZipUrl: `https://www.info.pmda.go.jp/kaisyuu/rcidx${FISCAL_YEAR_CODE}-2k_all.zip`,
   },
   {
     label: "クラスIII",
-    gtinZipUrl: "https://www.info.pmda.go.jp/kaisyuu/rcidx26-3k2_all.zip",
-    detailZipUrl: "https://www.info.pmda.go.jp/kaisyuu/rcidx26-3k_all.zip",
+    gtinZipUrl: `https://www.info.pmda.go.jp/kaisyuu/rcidx${FISCAL_YEAR_CODE}-3k2_all.zip`,
+    detailZipUrl: `https://www.info.pmda.go.jp/kaisyuu/rcidx${FISCAL_YEAR_CODE}-3k_all.zip`,
   },
 ];
 
@@ -44,7 +48,29 @@ const CLASSES = [
 // 取得元として信頼する唯一のホスト。PMDA側のURL構成が変わらない限り固定する。
 const TRUSTED_HOST = "www.info.pmda.go.jp";
 
+// GitHub Actionsでの日次実行時、PMDA側の一時的な応答遅延・瞬断でジョブ全体が
+// 即失敗することを避けるため、タイムアウトとリトライを設定する。
+const FETCH_TIMEOUT_MS = 30000;
+const FETCH_MAX_ATTEMPTS = 3;
+const FETCH_RETRY_DELAY_MS = 5000;
+
 async function fetchBuffer(url) {
+  let lastErr;
+  for (let attempt = 1; attempt <= FETCH_MAX_ATTEMPTS; attempt++) {
+    try {
+      return await fetchBufferOnce(url);
+    } catch (err) {
+      lastErr = err;
+      if (attempt < FETCH_MAX_ATTEMPTS) {
+        console.warn(`取得失敗（${attempt}/${FETCH_MAX_ATTEMPTS}回目、${FETCH_RETRY_DELAY_MS / 1000}秒後に再試行）: ${url} - ${err.message}`);
+        await new Promise((resolve) => setTimeout(resolve, FETCH_RETRY_DELAY_MS));
+      }
+    }
+  }
+  throw lastErr;
+}
+
+async function fetchBufferOnce(url) {
   const requestedUrl = new URL(url);
   if (requestedUrl.protocol !== "https:") {
     throw new Error(`安全でない通信方式です（https以外）: ${url}`);
@@ -53,7 +79,10 @@ async function fetchBuffer(url) {
     throw new Error(`信頼できないホストへのリクエストです: ${requestedUrl.hostname}`);
   }
 
-  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+  const res = await fetch(url, {
+    headers: { "User-Agent": "Mozilla/5.0" },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
 
   // リダイレクトを経由して信頼できないホスト・非HTTPSへ飛ばされていないか確認する
   // （fetchはデフォルトでリダイレクトに追従するため、最終到達先を別途検証する）。
@@ -107,6 +136,14 @@ function unzipFirstFile(buf) {
   const nameLen = buf.readUInt16LE(cdOffset + 28);
   const localHeaderOffset = buf.readUInt32LE(cdOffset + 42);
   const fileName = buf.toString("utf8", cdOffset + 46, cdOffset + 46 + nameLen);
+
+  // ZIP64形式（4GB超のファイル等で、サイズ・オフセットが0xFFFFFFFFのセンチネル値となり、
+  // 実際の値はZIP64拡張フィールド側に格納される）には未対応。本パーサは最小限のZIP実装の
+  // ため、将来PMDA側のZIP生成ツールがZIP64形式に変わった場合に備え、誤った小さい値として
+  // 誤動作するのではなく、原因が即座に分かるよう明示的にエラーとする。
+  if (compSize === 0xffffffff || uncompSize === 0xffffffff || localHeaderOffset === 0xffffffff) {
+    throw new Error("ZIP64形式には未対応です（PMDA側のZIP生成方式が変更された可能性があります）");
+  }
 
   // 展開前に、ZIP自体のサイズに対して展開後サイズが不自然に大きくないかを確認する
   // （いわゆるZIP爆弾：小さな圧縮ファイルから巨大な展開結果を生成する攻撃への対策）。
@@ -702,10 +739,27 @@ async function main() {
     if (history.removedArchive[recallNo]) delete history.removedArchive[recallNo];
   }
 
+  // history.json はGit管理下で毎日コミットされ、クラスIIだけでも数万行規模のデータを
+  // 保持するため、年単位で運用するとリポジトリの肥大化につながる。影響を抑えるため、
+  // ①recallNoで常に同じ順序に揃えて出力し、PMDA側の返却順の揺れによる無駄な差分を防ぐ、
+  // ②内容（recalls）が前回と実質的に変化していない日はgeneratedAtも更新しない（＝ファイル
+  //   が1バイトも変わらない）ことで、ワークフロー側の「差分が無ければコミットしない」判定が
+  //   正しく働き、無意味な日次コミットが積み重ならないようにする。
+  const sortedRecalls = Object.fromEntries(
+    [...allRecallRowsMap.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+  );
+  const sortedPrevRecalls = Object.fromEntries(
+    Object.entries(prevRecalls).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+  );
+  const recallsUnchanged = JSON.stringify(sortedRecalls) === JSON.stringify(sortedPrevRecalls);
+
   history.lastSnapshot = {
-    generatedAt: nowIso,
-    recalls: Object.fromEntries(allRecallRowsMap),
+    generatedAt: recallsUnchanged ? history.lastSnapshot.generatedAt : nowIso,
+    recalls: sortedRecalls,
   };
+  history.removedArchive = Object.fromEntries(
+    Object.entries(history.removedArchive).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+  );
   // 整形して保存する（圧縮1行JSONだとgitの行単位マージが効かず、無関係な変更でも
   // 毎回コンフリクトになるため。回収番号単位でキーを分けておけば大抵は自動マージできる）。
   fs.writeFileSync(OUT_HISTORY, JSON.stringify(history, null, 1), "utf8");
@@ -745,8 +799,12 @@ async function main() {
   };
   fs.writeFileSync(OUT_LOG, JSON.stringify(log, null, 2), "utf8");
 
-  // index.html が file:// でも読み込めるよう、script タグ経由でメタ情報を渡す
-  fs.writeFileSync(OUT_META_JS, "window.PMDA_META = " + JSON.stringify(log, null, 2) + ";\n", "utf8");
+  // index.html が file:// でも読み込めるよう、script タグ経由でメタ情報を渡す。
+  // meta.jsは<script src="...">で読み込む別ファイルのため、現状"</script>"による
+  // インラインスクリプト分断は発生しないが、将来の実装変更（インライン化・innerHTML化）
+  // に備えた防御的対策として、"<"をUnicodeエスケープしておく。
+  const metaJsBody = "window.PMDA_META = " + JSON.stringify(log, null, 2).replace(/</g, "\\u003c") + ";\n";
+  fs.writeFileSync(OUT_META_JS, metaJsBody, "utf8");
 
   console.log(`\n完了: ${dedupedRows.length}行 -> ${OUT_CSV}`);
   console.log(`累積版: ${cumulativeRows.length}行（回収済み${removedArchiveList.length}件分を含む、うち今回新たに検出${newlyRemovedCount}件） -> ${OUT_CUMULATIVE_CSV}`);
