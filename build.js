@@ -16,7 +16,7 @@ const OUT_LOG = path.join(OUT_DIR, "build-log.json");
 const OUT_META_JS = path.join(OUT_DIR, "meta.js");
 const NODATA = "NODATA"; // 空欄セルであることを示す固定コード
 // CSV生成ロジックのバージョン。網羅性・正確性・完全性等の判定ロジックや出力列構成を変更した場合はここを更新する。
-const BUILD_LOGIC_VERSION = "1.0";
+const BUILD_LOGIC_VERSION = "1.1";
 const STATUS_COL = "状態";
 const STATUS_ACTIVE = "現行";
 const STATUS_REMOVED = "回収済み（PMDA提供データから削除）";
