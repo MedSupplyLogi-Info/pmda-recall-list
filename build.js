@@ -81,7 +81,7 @@ async function fetchBuffer(url) {
 
 // ---------- 最小限のZIP展開（単一ファイル・deflate想定） ----------
 
-// 展開後サイズの上限（ZIP폭탄/メモリ枯渇対策）。
+// 展開後サイズの上限（ZIP爆弾/メモリ枯渇対策）。
 // 実際のPMDA提供CSVは展開後でも数十MB程度のため、十分な余裕を持って上限を設定する。
 const MAX_UNCOMPRESSED_SIZE = 200 * 1024 * 1024; // 200MB
 
@@ -132,7 +132,7 @@ function unzipFirstFile(buf) {
 // ---------- CSVパース（引用符内改行対応） ----------
 
 function parseCSV(text) {
-  text = text.replace(/^﻿/, "");
+  text = text.replace(/^﻿/, ""); // 先頭のBOM（byte order mark）を除去
   const rows = [];
   let row = [];
   let field = "";
@@ -196,8 +196,12 @@ function sanitizeAndValidateGtin(str, recallNo, name, invalidLog) {
   return cleaned;
 }
 
-function sanitizeAlnum(str) {
-  return toHalfWidth(str || "").replace(/[^0-9A-Za-z]/g, "");
+// ロット番号・シリアル番号の正規化。
+// 全角→半角変換とPMDA側のExcel対策用アポストロフィ・前後空白の除去のみを行い、
+// ハイフン等（GS1-128のAI(10)/(21)等で識別子の一部として印字され得る記号）は
+// 保持する（実データでも "22-12-041" 等、記号込みで識別子を構成する例が確認されている）。
+function sanitizeLotSerial(str) {
+  return toHalfWidth(str || "").replace(/^'+/, "").trim();
 }
 
 // 製品名内の改行・連続空白（全角スペース含む）を半角スペース1つに正規化する
@@ -286,13 +290,15 @@ function extractLabeledCodes(freeText) {
     const codes = [];
     const chunks = segment.split(/[,、，\s\n･・]+/).filter(Boolean);
     for (const chunk of chunks) {
-      const rangeMatch = chunk.match(/^([0-9A-Za-z]{2,20})[～~〜]([0-9A-Za-z]{2,20})$/);
+      // ロット・シリアル番号には "22-12-041" のようにハイフンを含む識別子もあるため、
+      // GTIN版CSVのロット・シリアル列（sanitizeLotSerial）と同じ基準でハイフンも許容する。
+      const rangeMatch = chunk.match(/^([0-9A-Za-z-]{2,20})[～~〜]([0-9A-Za-z-]{2,20})$/);
       if (rangeMatch) {
         const expanded = expandAlnumRange(rangeMatch[1], rangeMatch[2], 5000);
         if (expanded) { codes.push(...expanded); continue; }
       }
       const token = chunk.replace(/^[()（）]+|[()（）]+$/g, "");
-      if (/^[0-9A-Za-z]{2,20}$/.test(token)) codes.push(token);
+      if (/^[0-9A-Za-z-]{2,20}$/.test(token)) codes.push(token);
     }
     if (codes.length === 0) continue;
     if (SERIAL_LABELS.includes(label)) result.serial.push(...codes);
@@ -309,7 +315,10 @@ function extractEnumeratedCodesFromFreeText(freeText) {
   if (!freeText) return [];
   const normalized = toHalfWidth(freeText);
   if (/全ロット/.test(normalized)) return [];
-  const tokens = normalized.match(/\b[0-9]{6,14}\b/g) || [];
+  // \b（単語境界）は半角英数字・アンダースコアとそれ以外の境界にしかマッチしないため、
+  // "Lot12345678" のように数字の直前が半角英字の場合に抽出漏れが起こる。
+  // 否定先読み・否定後読みで「前後が半角英数字でない」ことを直接確認する。
+  const tokens = normalized.match(/(?<![0-9A-Za-z])[0-9]{6,14}(?![0-9A-Za-z])/g) || [];
   const unique = [...new Set(tokens)];
   return unique.length >= 5 ? unique : [];
 }
@@ -426,6 +435,18 @@ async function processClass(cls) {
 
   const gtinRecallIds = new Set(gtinData.map((r) => r[0]));
 
+  // 回収番号単位で「その回収に属する全行のロット・シリアルが空欄」かどうかを判定する。
+  // 1件の回収に複数行（複数GTIN等）がある場合、一部の行だけが空欄のケースを
+  // 「ロット・シリアル両方欠落の回収」として誤って集計しないよう、行単位ではなく
+  // 回収番号単位で判定する。
+  const recallAllBlank = new Map();
+  for (const r of gtinData) {
+    const recallNo = r[0];
+    const rowBlank = !sanitizeLotSerial(r[7]) && !sanitizeLotSerial(r[8]);
+    if (!recallAllBlank.has(recallNo)) recallAllBlank.set(recallNo, true);
+    if (!rowBlank) recallAllBlank.set(recallNo, false);
+  }
+
   function recordBothBlank(recallNo, detailRow, freeText, resolved) {
     const { generalName, brandName } = splitGeneralAndBrandName(detailRow ? detailRow[detailNameColIdx] : "");
     let status;
@@ -458,10 +479,10 @@ async function processClass(cls) {
     ];
     const gtinList = gtinValues.length > 0 ? gtinValues : [NODATA];
 
-    let lot = sanitizeAlnum(rawLot);
-    let serial = sanitizeAlnum(rawSerial);
+    let lot = sanitizeLotSerial(rawLot);
+    let serial = sanitizeLotSerial(rawSerial);
 
-    if (!lot && !serial) {
+    if (!lot && !serial && recallAllBlank.get(recallNo)) {
       const detailRow = detailByRecall.get(recallNo);
       const freeText = detailRow ? detailRow[freeTextColIdx] : null;
       const resolved = resolveMissingCodes(freeText);
@@ -509,9 +530,22 @@ async function processClass(cls) {
     }
   }
 
+  // 出力CSV側は最終的にmain()側で全クラス横断の重複除去を行うが、
+  // history.json（回収番号単位の行一覧）・累積CSVの「回収済み」側はrecallRowsMapを
+  // そのまま使うため、ここでもクラス内の重複行（同一回収番号・同一内容の行）を
+  // 除去しておく。除去しないと、重複行を含む回収がPMDA側で削除された際、
+  // 累積CSVの「回収済み」側だけ重複した行数が残ってしまう。
+  const seenTaggedRows = new Set();
+  const dedupedTaggedRows = taggedRows.filter(({ recallNo, row }) => {
+    const key = recallNo + "\x01" + row.join("\x01");
+    if (seenTaggedRows.has(key)) return false;
+    seenTaggedRows.add(key);
+    return true;
+  });
+
   // 回収番号単位の行一覧（履歴保存・累積CSV用）を構築する
   const recallRowsMap = new Map();
-  for (const { recallNo, row } of taggedRows) {
+  for (const { recallNo, row } of dedupedTaggedRows) {
     if (!recallRowsMap.has(recallNo)) {
       const detailRow = detailByRecall.get(recallNo);
       const { generalName, brandName } = splitGeneralAndBrandName(detailRow ? detailRow[detailNameColIdx] : "");
@@ -520,7 +554,7 @@ async function processClass(cls) {
     recallRowsMap.get(recallNo).rows.push(row);
   }
 
-  const outputRows = taggedRows.map((t) => t.row);
+  const outputRows = dedupedTaggedRows.map((t) => t.row);
   const allRecallIds = new Set([...gtinRecallIds, ...detailData.map((r) => r[0])]);
 
   const supplemented = [...bothBlankRecalls.values()].filter((x) => x.status === "supplemented");
@@ -556,7 +590,7 @@ function toCsvField(v) {
 function writeCsv(filePath, header, rows) {
   const lines = [header.map(toCsvField).join(",")];
   for (const row of rows) lines.push(row.map(toCsvField).join(","));
-  fs.writeFileSync(filePath, "﻿" + lines.join("\r\n") + "\r\n", "utf8");
+  fs.writeFileSync(filePath, "﻿" + lines.join("\r\n") + "\r\n", "utf8"); // 先頭にBOMを付与（Excelでの文字コード誤認識対策）
 }
 
 // 前回実行時点のスナップショット（history.json）を読み込む。初回実行時は存在しない。
@@ -622,7 +656,7 @@ async function main() {
   const seen = new Set();
   const dedupedRows = [];
   for (const row of allRows) {
-    const key = row.join("");
+    const key = row.join("\x01") /* 区切り文字に制御文字(SOH)を使い、列の連結による衝突を避ける */;
     if (!seen.has(key)) {
       seen.add(key);
       dedupedRows.push(row);
