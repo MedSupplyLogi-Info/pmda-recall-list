@@ -81,6 +81,10 @@ async function fetchBuffer(url) {
 
 // ---------- 最小限のZIP展開（単一ファイル・deflate想定） ----------
 
+// 展開後サイズの上限（ZIP폭탄/メモリ枯渇対策）。
+// 実際のPMDA提供CSVは展開後でも数十MB程度のため、十分な余裕を持って上限を設定する。
+const MAX_UNCOMPRESSED_SIZE = 200 * 1024 * 1024; // 200MB
+
 function unzipFirstFile(buf) {
   // End Of Central Directory (EOCD) を末尾から探す
   const EOCD_SIG = 0x06054b50;
@@ -99,9 +103,16 @@ function unzipFirstFile(buf) {
 
   const compMethod = buf.readUInt16LE(cdOffset + 10);
   const compSize = buf.readUInt32LE(cdOffset + 20);
+  const uncompSize = buf.readUInt32LE(cdOffset + 24);
   const nameLen = buf.readUInt16LE(cdOffset + 28);
   const localHeaderOffset = buf.readUInt32LE(cdOffset + 42);
   const fileName = buf.toString("utf8", cdOffset + 46, cdOffset + 46 + nameLen);
+
+  // 展開前に、ZIP自体のサイズに対して展開後サイズが不自然に大きくないかを確認する
+  // （いわゆるZIP爆弾：小さな圧縮ファイルから巨大な展開結果を生成する攻撃への対策）。
+  if (uncompSize > MAX_UNCOMPRESSED_SIZE) {
+    throw new Error(`展開後サイズが上限を超えています（${uncompSize}バイト > 上限${MAX_UNCOMPRESSED_SIZE}バイト）。ZIP爆弾の可能性があるため中断しました。`);
+  }
 
   const LFH_SIG = 0x04034b50;
   if (buf.readUInt32LE(localHeaderOffset) !== LFH_SIG) throw new Error("ZIP形式が不正です（ローカルヘッダが見つかりません）");
@@ -112,7 +123,7 @@ function unzipFirstFile(buf) {
 
   let content;
   if (compMethod === 0) content = compData; // 無圧縮
-  else if (compMethod === 8) content = zlib.inflateRawSync(compData); // deflate
+  else if (compMethod === 8) content = zlib.inflateRawSync(compData, { maxOutputLength: MAX_UNCOMPRESSED_SIZE }); // deflate
   else throw new Error(`未対応の圧縮方式です: ${compMethod}`);
 
   return { fileName, content };
@@ -529,8 +540,17 @@ async function processClass(cls) {
   };
 }
 
+// CSVインジェクション（Excel等での数式注入）対策。
+// セルの先頭が =, +, -, @ や タブ/改行等だと、Excelで開いた際に数式として
+// 評価されてしまう場合があるため、先頭にシングルクォートを付与して無害化する
+// （PMDA自身の公開CSVでも同様の手法で日付列等をテキスト強制している）。
+const FORMULA_TRIGGER_CHARS = /^[=+\-@\t\r]/;
+function sanitizeCsvCell(v) {
+  const s = String(v);
+  return FORMULA_TRIGGER_CHARS.test(s) ? "'" + s : s;
+}
 function toCsvField(v) {
-  return `"${String(v).replace(/"/g, '""')}"`;
+  return `"${sanitizeCsvCell(v).replace(/"/g, '""')}"`;
 }
 
 function writeCsv(filePath, header, rows) {
