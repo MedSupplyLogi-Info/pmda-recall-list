@@ -41,11 +41,42 @@ const CLASSES = [
 
 // ---------- HTTP ----------
 
+// 取得元として信頼する唯一のホスト。PMDA側のURL構成が変わらない限り固定する。
+const TRUSTED_HOST = "www.info.pmda.go.jp";
+
 async function fetchBuffer(url) {
+  const requestedUrl = new URL(url);
+  if (requestedUrl.protocol !== "https:") {
+    throw new Error(`安全でない通信方式です（https以外）: ${url}`);
+  }
+  if (requestedUrl.hostname !== TRUSTED_HOST) {
+    throw new Error(`信頼できないホストへのリクエストです: ${requestedUrl.hostname}`);
+  }
+
   const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+
+  // リダイレクトを経由して信頼できないホスト・非HTTPSへ飛ばされていないか確認する
+  // （fetchはデフォルトでリダイレクトに追従するため、最終到達先を別途検証する）。
+  const finalUrl = new URL(res.url || url);
+  if (finalUrl.protocol !== "https:") {
+    throw new Error(`リダイレクト先が安全でない通信方式です（https以外）: ${finalUrl.href}`);
+  }
+  if (finalUrl.hostname !== TRUSTED_HOST) {
+    throw new Error(`信頼できないホストへリダイレクトされました: ${finalUrl.hostname}（元URL: ${url}）`);
+  }
+
   if (!res.ok) throw new Error(`HTTPエラー ${res.status}: ${url}`);
+
   const ab = await res.arrayBuffer();
-  return Buffer.from(ab);
+  const buf = Buffer.from(ab);
+
+  // 取得内容がZIPファイル（ローカルファイルヘッダ "PK\x03\x04"）であることを確認する。
+  // PMDA側の障害・WAFブロック等でHTMLエラーページ等が返された場合はここで検知する。
+  if (buf.length < 4 || buf[0] !== 0x50 || buf[1] !== 0x4b || buf[2] !== 0x03 || buf[3] !== 0x04) {
+    throw new Error(`期待されるZIP形式ではありません（PMDA側のエラーページ等が返された可能性があります）: ${url}`);
+  }
+
+  return buf;
 }
 
 // ---------- 最小限のZIP展開（単一ファイル・deflate想定） ----------
@@ -517,8 +548,32 @@ function loadHistory() {
   }
 }
 
+// 前回取得時点に対して回収件数が急減していないかを確認する。
+// PMDA側の一時的な配信不備（空ファイル・一部クラスのみ欠落等）を、
+// 正常な更新として誤って公開してしまうことを防ぐための異常検知。
+const ANOMALY_MIN_PREV_COUNT = 5; // これ未満の件数だった場合は変動率が不安定なため判定対象外
+const ANOMALY_DROP_RATIO = 0.5; // 前回の何割を下回ったら異常とみなすか
+
+function checkForAnomalousDrop(label, prevCount, newCount) {
+  if (prevCount < ANOMALY_MIN_PREV_COUNT) return;
+  if (newCount < prevCount * ANOMALY_DROP_RATIO) {
+    throw new Error(
+      `[異常検知] ${label} の回収件数が前回から急減しました（前回${prevCount}件 → 今回${newCount}件）。` +
+      `PMDA側の配信不備の可能性があるため、公開データの更新を中断しました。`
+    );
+  }
+}
+
 async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
+
+  // 異常検知・回収済み検出のため、前回スナップショットを先に読み込んでおく。
+  const history = loadHistory();
+  const prevRecalls = history.lastSnapshot.recalls || {};
+  const prevCountByClass = new Map();
+  for (const info of Object.values(prevRecalls)) {
+    prevCountByClass.set(info.class, (prevCountByClass.get(info.class) || 0) + 1);
+  }
 
   const allRows = [];
   const summary = [];
@@ -526,6 +581,7 @@ async function main() {
 
   for (const cls of CLASSES) {
     const result = await processClass(cls);
+    checkForAnomalousDrop(cls.label, prevCountByClass.get(cls.label) || 0, result.recallCount);
     allRows.push(...result.outputRows);
     for (const [recallNo, info] of result.recallRowsMap) allRecallRowsMap.set(recallNo, info);
     summary.push({
@@ -557,8 +613,7 @@ async function main() {
   writeCsv(OUT_CSV, header, dedupedRows);
 
   // ---------- 履歴管理：PMDA提供データから消えた（＝回収済みと推定される）回収の検出 ----------
-  const history = loadHistory();
-  const prevRecalls = history.lastSnapshot.recalls || {};
+  // history / prevRecalls は異常検知のため main() 冒頭で読み込み済みのものを使う。
   const nowIso = new Date().toISOString();
   if (!history.trackingStartedAt) history.trackingStartedAt = nowIso;
 

@@ -16,6 +16,7 @@ permissions:
   contents: write
   pages: write
   id-token: write
+  issues: write
 
 concurrency:
   group: pages
@@ -37,7 +38,19 @@ jobs:
           check-latest: true
 
       - name: PMDAから最新データを取得しCSVを生成（内部データは継続更新）
+        id: build_csv
         run: node build.js
+
+      - name: 失敗時にGitHub Issueで通知（安全な通信・信頼ソース確認・異常検知のいずれかで中断した場合）
+        if: failure() && steps.build_csv.outcome == 'failure'
+        run: |
+          gh issue create \
+            --title "CSVビルド失敗: $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --body "PMDAからのデータ取得・検証に失敗したため、公開データの更新を中断しました。詳細はActionsログを確認してください。
+
+          実行ログ: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: 履歴データ（回収済み検出用）をリポジトリにコミット
         run: |
