@@ -21,7 +21,7 @@ const NODATA = "NODATA"; // 空欄セルであることを示す固定コード�
 // 機械的に「全ロット対象の回収である」と判別できるようにするためのマーカー。
 const ALL_LOTS_MARKER = "ALLLOTS";
 // CSV生成ロジックのバージョン。網羅性・正確性・完全性等の判定ロジックや出力列構成を変更した場合はここを更新する。
-const BUILD_LOGIC_VERSION = "1.5";
+const BUILD_LOGIC_VERSION = "1.6";
 const STATUS_COL = "状態";
 const STATUS_ACTIVE = "現行";
 const STATUS_REMOVED = "回収済み（PMDA提供データから削除）";
@@ -922,10 +922,28 @@ async function main() {
 
   // ---------- 累積CSV：現行データ＋回収済み（PMDA提供データから削除済み）データ ----------
   const cumulativeHeader = [...header, STATUS_COL];
-  const cumulativeRows = [
+  // removedArchiveには、出力列構成（header）を拡張する前（例: ID/バージョン列の新設前）に
+  // 保存された古い行がそのまま残っている場合がある。列数が足りない行はNODATAで埋めて
+  // 現在のheader長に揃えてから状態列を付与する（揃えないと、古い行だけ状態列の値が
+  // 一つ手前の列にずれて出力されてしまう）。
+  function normalizeRowLength(row) {
+    if (row.length >= header.length) return row;
+    return [...row, ...Array(header.length - row.length).fill(NODATA)];
+  }
+  const cumulativeRowsRaw = [
     ...dedupedRows.map((row) => [...row, STATUS_ACTIVE]),
-    ...Object.values(history.removedArchive).flatMap((v) => v.rows.map((row) => [...row, STATUS_REMOVED])),
+    ...Object.values(history.removedArchive).flatMap((v) => v.rows.map((row) => [...normalizeRowLength(row), STATUS_REMOVED])),
   ];
+  // removedArchiveには、重複除去ロジックを導入する前に保存された古いスナップショットが
+  // 残っている場合がある。現行データ側（dedupedRows）は既に重複除去済みだが、
+  // 念のため累積版の出力全体に対しても最終防衛線として重複除去を行う。
+  const seenCumulative = new Set();
+  const cumulativeRows = cumulativeRowsRaw.filter((row) => {
+    const key = row.join("\x01");
+    if (seenCumulative.has(key)) return false;
+    seenCumulative.add(key);
+    return true;
+  });
   writeCsv(OUT_CUMULATIVE_CSV, cumulativeHeader, cumulativeRows);
 
   const log = {
