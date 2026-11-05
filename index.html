@@ -268,9 +268,11 @@
       <tbody id="bothBlankRows"></tbody>
     </table>
     <p class="meta-line">
-      <span class="status-badge status-ok">補完成功</span> 自由記述から復元できた
+      <span class="status-badge status-ok">補完成功</span> ロット・シリアル番号を自由記述から復元できた
+      <span class="status-badge status-ok">補完成功（プログラムID）</span> プログラム医療機器の個体管理IDを「ID/バージョン」列に復元できた
+      <span class="status-badge status-ok">補完成功（バージョン）</span> プログラム医療機器のバージョン番号を「ID/バージョン」列に復元できた
       <span class="status-badge status-warn">要確認</span> 復元できず NODATA のまま
-      <span class="status-badge status-removed">対象外</span> 「全ロット」明記（ロット番号欄は<code>ALLLOTS</code>）・ソフトウェア製品等（NODATAのまま）、空欄・ALLLOTSが正しいため確認不要
+      <span class="status-badge status-removed">ALLLOTS</span> 「全ロット」等の記載があり、ロット番号欄を<code>ALLLOTS</code>としたため確認不要
     </p>
   </div>
 
@@ -425,11 +427,20 @@
     }
 
     // ロット・シリアルが両方空欄だった回収 ＋ 補完状況
+    // reason（全ロット対象／プログラム医療機器のID・バージョン補完）に応じてラベルを分ける。
     var STATUS_LABEL = {
       supplemented: { text: "補完成功", cls: "status-ok" },
       unresolved: { text: "要確認", cls: "status-warn" },
       excluded: { text: "対象外", cls: "status-removed" },
     };
+    var REASON_LABEL = {
+      all_lots: { text: "ALLLOTS", cls: "status-removed" },
+      program_id: { text: "補完成功（プログラムID）", cls: "status-ok" },
+      program_version: { text: "補完成功（バージョン）", cls: "status-ok" },
+    };
+    function statusLabelFor(status, reason) {
+      return (reason && REASON_LABEL[reason]) || STATUS_LABEL[status];
+    }
     var bothBlank = [];
     meta.classes.forEach(function (c) {
       (c.supplementedRecalls || []).forEach(function (item) { bothBlank.push({ cls: c.class, status: "supplemented", item: item }); });
@@ -442,7 +453,7 @@
       var statusOrder = { unresolved: 0, excluded: 1, supplemented: 2 };
       bothBlank.sort(function (a, b) { return statusOrder[a.status] - statusOrder[b.status]; });
       bothBlank.forEach(function (entry) {
-        var label = STATUS_LABEL[entry.status];
+        var label = statusLabelFor(entry.status, entry.item.reason);
         var tr = document.createElement("tr");
 
         var tdStatus = document.createElement("td");

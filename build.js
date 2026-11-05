@@ -21,7 +21,7 @@ const NODATA = "NODATA"; // 空欄セルであることを示す固定コード�
 // 機械的に「全ロット対象の回収である」と判別できるようにするためのマーカー。
 const ALL_LOTS_MARKER = "ALLLOTS";
 // CSV生成ロジックのバージョン。網羅性・正確性・完全性等の判定ロジックや出力列構成を変更した場合はここを更新する。
-const BUILD_LOGIC_VERSION = "1.4";
+const BUILD_LOGIC_VERSION = "1.5";
 const STATUS_COL = "状態";
 const STATUS_ACTIVE = "現行";
 const STATUS_REMOVED = "回収済み（PMDA提供データから削除）";
@@ -493,21 +493,13 @@ function resolveMissingCodes(freeText) {
   return null;
 }
 
-// 復元できなかった回収のうち、「要確認」として提示する意味が無い（本来的に空欄が正しい）
-// ケースを判別する。いずれも一覧からは除外するが、CSV側の行（NODATA）はこれまで通り出力する。
-//
-// ・全ロット対応: 自由記述に「対象ロット：全ロット」等の明記があり、ロット非特定であることが
-//   PMDA側で既に確定しているため、確認の必要が無い。
-// ・ソフトウェア医療機器: 自由記述が「バージョン X.Y」形式のバージョン表記のみで構成されており、
-//   当該製品についてはロット/シリアルではなくバージョンで管理されていると判断できる
-//   （GS1規格上はソフトウェアへのGTIN付与も可能であり、GTINが存在し得ないわけではない）。
+// 復元できなかった回収のうち，自由記述に「対象ロット：全ロット」等の明記があり、
+// ロット非特定であることがPMDA側で既に確定しているため「要確認」として提示する
+// 意味が無いケースを判別する。一覧からは除外するが、CSV側の行（ALL_LOTS_MARKER）は
+// これまで通り出力する。
 function isAllLotsNonSpecific(freeText) {
   if (!freeText) return false;
   return matchesAllLotsPattern(toHalfWidth(freeText));
-}
-function looksLikeSoftwareVersioning(freeText) {
-  if (!freeText) return false;
-  return /バージョン\s*[0-9]+(\.[0-9]+)+/.test(toHalfWidth(freeText));
 }
 
 // resolveMissingCodes の結果から [ロット番号, シリアル番号] の組を組み立てる。
@@ -598,19 +590,25 @@ async function processClass(cls) {
     if (!rowBlank) recallAllBlank.set(recallNo, false);
   }
 
-  function recordBothBlank(recallNo, detailRow, freeText, resolved) {
+  // status: "supplemented"（ロット/シリアル、またはプログラム医療機器のID/バージョンで復元）/
+  //         "unresolved"（復元不可・要確認）/ "excluded"（全ロット対応。本来的に空欄が正しいため要確認から除外）
+  // reason: "program_id" / "program_version" の場合、ロット・シリアルではなくID/バージョン列で
+  //         補完されたことを示す（補完成功だが内容が異なるため、サイト上で区別して表示する）。
+  function recordBothBlank(recallNo, detailRow, freeText, resolved, isAllLots, programInfo) {
     const { generalName, brandName } = splitGeneralAndBrandName(detailRow ? detailRow[detailNameColIdx] : "");
     let status;
     let reason;
     if (resolved) {
       status = "supplemented";
       if (!resolved.confident) ambiguousTypeRecalls.add(recallNo);
-    } else if (isAllLotsNonSpecific(freeText)) {
+    } else if (isAllLots) {
       status = "excluded";
       reason = "all_lots"; // 全ロット対象（ロット番号欄はALL_LOTS_MARKERで機械判別可能）
-    } else if (looksLikeSoftwareVersioning(freeText)) {
-      status = "excluded";
-      reason = "software"; // ソフトウェア医療機器（バージョン管理のためロット/シリアルの概念が無く、NODATAが適切）
+    } else if (programInfo) {
+      // プログラム医療機器の個体管理ID・バージョンで復元できた場合は「対象外」ではなく
+      // 「補完成功」とする（ID/バージョン列に実際の値が入っているため）。
+      status = "supplemented";
+      reason = programInfo.type === "id" ? "program_id" : "program_version";
     } else {
       status = "unresolved";
     }
@@ -626,9 +624,9 @@ async function processClass(cls) {
     const detailRow = detailByRecall.get(recallNo);
     const freeText = detailRow ? detailRow[freeTextColIdx] : null;
     const resolved = resolveMissingCodes(freeText);
-    recordBothBlank(recallNo, detailRow, freeText, resolved);
     const isAllLots = !resolved && isAllLotsNonSpecific(freeText);
     const programInfo = !resolved && !isAllLots ? resolveProgramIdOrVersion(freeText) : null;
+    recordBothBlank(recallNo, detailRow, freeText, resolved, isAllLots, programInfo);
     const info = { resolved, isAllLots, programInfo };
     resolvedCacheByRecall.set(recallNo, info);
     return info;
@@ -706,26 +704,25 @@ async function processClass(cls) {
     const postDateYmd = convertSlashDateToYyyymmdd(detailRow[detailPostDateColIdx]) || NODATA;
     const freeText = detailRow[freeTextColIdx];
     const resolved = resolveMissingCodes(freeText);
-    recordBothBlank(recallNo, detailRow, freeText, resolved);
+    const isAllLots = !resolved && isAllLotsNonSpecific(freeText);
+    const programInfo = !resolved && !isAllLots ? resolveProgramIdOrVersion(freeText) : null;
+    recordBothBlank(recallNo, detailRow, freeText, resolved, isAllLots, programInfo);
 
     if (resolved) {
       for (const [lotVal, serialVal] of buildLotSerialPairs(resolved)) {
         taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, lotVal, serialVal, NODATA] });
       }
-    } else if (isAllLotsNonSpecific(freeText)) {
+    } else if (isAllLots) {
       // 「全ロット対象」等、ロットが非特定であることが自由記述上明記されている場合は、
       // 単なる欠落（NODATA）と区別できるよう、ロット番号欄に専用マーカーを出力する。
       taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, ALL_LOTS_MARKER, NODATA, NODATA] });
-    } else {
-      // プログラム医療機器の個体管理ID・バージョンをID/バージョン列に出力する（無ければNODATA）。
-      const programInfo = resolveProgramIdOrVersion(freeText);
-      if (programInfo) {
-        for (const code of programInfo.codes) {
-          taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, NODATA, NODATA, code] });
-        }
-      } else {
-        taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, NODATA, NODATA, NODATA] });
+    } else if (programInfo) {
+      // プログラム医療機器の個体管理ID・バージョンをID/バージョン列に出力する。
+      for (const code of programInfo.codes) {
+        taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, NODATA, NODATA, code] });
       }
+    } else {
+      taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, NODATA, NODATA, NODATA] });
     }
   }
 
