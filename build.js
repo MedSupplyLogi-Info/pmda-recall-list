@@ -21,7 +21,7 @@ const NODATA = "NODATA"; // 空欄セルであることを示す固定コード�
 // 機械的に「全ロット対象の回収である」と判別できるようにするためのマーカー。
 const ALL_LOTS_MARKER = "ALLLOTS";
 // CSV生成ロジックのバージョン。網羅性・正確性・完全性等の判定ロジックや出力列構成を変更した場合はここを更新する。
-const BUILD_LOGIC_VERSION = "1.7";
+const BUILD_LOGIC_VERSION = "1.8";
 const STATUS_COL = "状態";
 const STATUS_ACTIVE = "現行";
 const STATUS_REMOVED = "回収済み（PMDA提供データから削除）";
@@ -676,7 +676,7 @@ async function processClass(cls) {
         const pairs = buildLotSerialPairs(resolved);
         for (const gtin of gtinList) {
           for (const [lotVal, serialVal] of pairs) {
-            taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, lotVal, serialVal, NODATA, deriveJanFromGtin(gtin)] });
+            taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, deriveJanFromGtin(gtin), lotVal, serialVal, NODATA] });
           }
         }
         continue;
@@ -685,7 +685,7 @@ async function processClass(cls) {
         // 「全ロット対象」等、ロットが非特定であることが自由記述上明記されている場合は、
         // 単なる欠落（NODATA）と区別できるよう、ロット番号欄に専用マーカーを出力する。
         for (const gtin of gtinList) {
-          taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, ALL_LOTS_MARKER, NODATA, NODATA, deriveJanFromGtin(gtin)] });
+          taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, deriveJanFromGtin(gtin), ALL_LOTS_MARKER, NODATA, NODATA] });
         }
         continue;
       }
@@ -693,7 +693,7 @@ async function processClass(cls) {
         // プログラム医療機器の個体管理ID・バージョンをID/バージョン列に出力する。
         for (const gtin of gtinList) {
           for (const code of programInfo.codes) {
-            taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, NODATA, NODATA, code, deriveJanFromGtin(gtin)] });
+            taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, deriveJanFromGtin(gtin), NODATA, NODATA, code] });
           }
         }
         continue;
@@ -703,7 +703,7 @@ async function processClass(cls) {
     const lotOut = lot || NODATA;
     const serialOut = serial || NODATA;
     for (const gtin of gtinList) {
-      taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, lotOut, serialOut, NODATA, deriveJanFromGtin(gtin)] });
+      taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, deriveJanFromGtin(gtin), lotOut, serialOut, NODATA] });
     }
   }
 
@@ -727,16 +727,16 @@ async function processClass(cls) {
 
     if (resolved) {
       for (const [lotVal, serialVal] of buildLotSerialPairs(resolved)) {
-        taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, lotVal, serialVal, NODATA, NODATA] });
+        taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, NODATA, lotVal, serialVal, NODATA] });
       }
     } else if (isAllLots) {
       // 「全ロット対象」等、ロットが非特定であることが自由記述上明記されている場合は、
       // 単なる欠落（NODATA）と区別できるよう、ロット番号欄に専用マーカーを出力する。
-      taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, ALL_LOTS_MARKER, NODATA, NODATA, NODATA] });
+      taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, NODATA, ALL_LOTS_MARKER, NODATA, NODATA] });
     } else if (programInfo) {
       // プログラム医療機器の個体管理ID・バージョンをID/バージョン列に出力する。
       for (const code of programInfo.codes) {
-        taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, NODATA, NODATA, code, NODATA] });
+        taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, NODATA, NODATA, NODATA, code] });
       }
     } else {
       taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, NODATA, NODATA, NODATA, NODATA] });
@@ -879,7 +879,7 @@ async function main() {
     }
   }
 
-  const header = ["回収番号", "一般的名称及び販売名", "掲載年月日", "回収開始日", "GTIN", "ロット番号", "シリアル番号", "ID/バージョン", "JAN"];
+  const header = ["回収番号", "一般的名称及び販売名", "掲載年月日", "回収開始日", "GTIN", "JAN", "ロット番号", "シリアル番号", "ID/バージョン"];
   writeCsv(OUT_CSV, header, dedupedRows);
 
   // ---------- 履歴管理：PMDA提供データから消えた（＝回収済みと推定される）回収の検出 ----------
@@ -941,19 +941,17 @@ async function main() {
   const cumulativeHeader = [...header, STATUS_COL];
   // removedArchiveには、出力列構成（header）を拡張する前（例: ID/バージョン列の新設前）に
   // 保存された古い行がそのまま残っている場合がある。列数が足りない行はNODATAで埋めて
-  // 現在のheader長に揃えてから状態列を付与する（揃えないと、古い行だけ状態列の値が
-  // 一つ手前の列にずれて出力されてしまう）。
-  // 旧形式（列追加前）のアーカイブ済み行を現行の列数に合わせて補完する。
-  // JAN列は既存のGTIN値（5列目=row[4]）から再計算で復元できるため、
-  // 単純なNODATA埋めではなくderiveJanFromGtinで導出する。
-  const janColIdx = header.indexOf("JAN");
+  // 現在のheader長・列順に揃えてから状態列を付与する（揃えないと、古い行だけ値が
+  // ずれた列に出力されてしまう）。
+  // 旧形式（JAN列追加前）のアーカイブ済み行は [回収番号,名称,掲載年月日,回収開始日,GTIN,
+  // ロット番号,シリアル番号,(ID/バージョン)] の並びで、JAN列を持たない（7列=ID/バージョン
+  // 列追加前、8列=JAN列追加前のいずれか）。現行の列順（GTINの直後にJAN）に合わせて再構成し、
+  // JANは保持済みのGTIN値（row[4]）から再計算して復元する。
   function normalizeRowLength(row) {
-    if (row.length >= header.length) return row;
-    const padded = [...row];
-    for (let i = row.length; i < header.length; i++) {
-      padded.push(i === janColIdx ? deriveJanFromGtin(row[4]) : NODATA);
-    }
-    return padded;
+    if (row.length === header.length) return row;
+    const jan = deriveJanFromGtin(row[4]);
+    const idVersion = row.length >= 8 ? row[7] : NODATA;
+    return [row[0], row[1], row[2], row[3], row[4], jan, row[5], row[6], idVersion];
   }
   const cumulativeRowsRaw = [
     ...dedupedRows.map((row) => [...row, STATUS_ACTIVE]),
