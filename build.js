@@ -21,7 +21,7 @@ const NODATA = "NODATA"; // 空欄セルであることを示す固定コード�
 // 機械的に「全ロット対象の回収である」と判別できるようにするためのマーカー。
 const ALL_LOTS_MARKER = "ALLLOTS";
 // CSV生成ロジックのバージョン。網羅性・正確性・完全性等の判定ロジックや出力列構成を変更した場合はここを更新する。
-const BUILD_LOGIC_VERSION = "1.6";
+const BUILD_LOGIC_VERSION = "1.7";
 const STATUS_COL = "状態";
 const STATUS_ACTIVE = "現行";
 const STATUS_REMOVED = "回収済み（PMDA提供データから削除）";
@@ -235,6 +235,23 @@ function sanitizeAndValidateGtin(str, recallNo, name, invalidLog) {
     return null;
   }
   return cleaned;
+}
+
+// GTIN-14からJANコード（13桁）を導出する。
+// GTIN-14 = インジケータ(1桁) + 会社識別コード/商品アイテムコード(12桁) + チェックデジット(1桁) であり、
+// チェックデジットは常にこの中間12桁のみから一意に決まる（インジケータ桁は計算に関与しない）。
+// そのためインジケータが0（個装）以外（内装・ケース等の上位包装）であっても、
+// 中間12桁からJAN-13用のチェックデジットを再計算すれば、GS1仕様上正しいJANコードが得られる。
+function deriveJanFromGtin(gtin) {
+  if (!gtin || gtin === NODATA || gtin.length !== 14 || !/^[0-9]+$/.test(gtin)) return NODATA;
+  const base12 = gtin.slice(1, 13).split("").map(Number);
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    const posFromRight = 12 - i;
+    sum += base12[i] * (posFromRight % 2 === 1 ? 3 : 1);
+  }
+  const check = (10 - (sum % 10)) % 10;
+  return gtin.slice(1, 13) + check;
 }
 
 // ロット番号・シリアル番号の正規化。
@@ -659,7 +676,7 @@ async function processClass(cls) {
         const pairs = buildLotSerialPairs(resolved);
         for (const gtin of gtinList) {
           for (const [lotVal, serialVal] of pairs) {
-            taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, lotVal, serialVal, NODATA] });
+            taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, lotVal, serialVal, NODATA, deriveJanFromGtin(gtin)] });
           }
         }
         continue;
@@ -668,7 +685,7 @@ async function processClass(cls) {
         // 「全ロット対象」等、ロットが非特定であることが自由記述上明記されている場合は、
         // 単なる欠落（NODATA）と区別できるよう、ロット番号欄に専用マーカーを出力する。
         for (const gtin of gtinList) {
-          taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, ALL_LOTS_MARKER, NODATA, NODATA] });
+          taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, ALL_LOTS_MARKER, NODATA, NODATA, deriveJanFromGtin(gtin)] });
         }
         continue;
       }
@@ -676,7 +693,7 @@ async function processClass(cls) {
         // プログラム医療機器の個体管理ID・バージョンをID/バージョン列に出力する。
         for (const gtin of gtinList) {
           for (const code of programInfo.codes) {
-            taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, NODATA, NODATA, code] });
+            taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, NODATA, NODATA, code, deriveJanFromGtin(gtin)] });
           }
         }
         continue;
@@ -686,7 +703,7 @@ async function processClass(cls) {
     const lotOut = lot || NODATA;
     const serialOut = serial || NODATA;
     for (const gtin of gtinList) {
-      taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, lotOut, serialOut, NODATA] });
+      taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, gtin, lotOut, serialOut, NODATA, deriveJanFromGtin(gtin)] });
     }
   }
 
@@ -710,19 +727,19 @@ async function processClass(cls) {
 
     if (resolved) {
       for (const [lotVal, serialVal] of buildLotSerialPairs(resolved)) {
-        taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, lotVal, serialVal, NODATA] });
+        taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, lotVal, serialVal, NODATA, NODATA] });
       }
     } else if (isAllLots) {
       // 「全ロット対象」等、ロットが非特定であることが自由記述上明記されている場合は、
       // 単なる欠落（NODATA）と区別できるよう、ロット番号欄に専用マーカーを出力する。
-      taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, ALL_LOTS_MARKER, NODATA, NODATA] });
+      taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, ALL_LOTS_MARKER, NODATA, NODATA, NODATA] });
     } else if (programInfo) {
       // プログラム医療機器の個体管理ID・バージョンをID/バージョン列に出力する。
       for (const code of programInfo.codes) {
-        taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, NODATA, NODATA, code] });
+        taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, NODATA, NODATA, code, NODATA] });
       }
     } else {
-      taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, NODATA, NODATA, NODATA] });
+      taggedRows.push({ recallNo, row: [recallNo, name, postDateYmd, dateYmd, NODATA, NODATA, NODATA, NODATA, NODATA] });
     }
   }
 
@@ -862,7 +879,7 @@ async function main() {
     }
   }
 
-  const header = ["回収番号", "一般的名称及び販売名", "掲載年月日", "回収開始日", "GTIN", "ロット番号", "シリアル番号", "ID/バージョン"];
+  const header = ["回収番号", "一般的名称及び販売名", "掲載年月日", "回収開始日", "GTIN", "ロット番号", "シリアル番号", "ID/バージョン", "JAN"];
   writeCsv(OUT_CSV, header, dedupedRows);
 
   // ---------- 履歴管理：PMDA提供データから消えた（＝回収済みと推定される）回収の検出 ----------
@@ -926,9 +943,17 @@ async function main() {
   // 保存された古い行がそのまま残っている場合がある。列数が足りない行はNODATAで埋めて
   // 現在のheader長に揃えてから状態列を付与する（揃えないと、古い行だけ状態列の値が
   // 一つ手前の列にずれて出力されてしまう）。
+  // 旧形式（列追加前）のアーカイブ済み行を現行の列数に合わせて補完する。
+  // JAN列は既存のGTIN値（5列目=row[4]）から再計算で復元できるため、
+  // 単純なNODATA埋めではなくderiveJanFromGtinで導出する。
+  const janColIdx = header.indexOf("JAN");
   function normalizeRowLength(row) {
     if (row.length >= header.length) return row;
-    return [...row, ...Array(header.length - row.length).fill(NODATA)];
+    const padded = [...row];
+    for (let i = row.length; i < header.length; i++) {
+      padded.push(i === janColIdx ? deriveJanFromGtin(row[4]) : NODATA);
+    }
+    return padded;
   }
   const cumulativeRowsRaw = [
     ...dedupedRows.map((row) => [...row, STATUS_ACTIVE]),
