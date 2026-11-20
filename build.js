@@ -21,7 +21,7 @@ const NODATA = "NODATA"; // 空欄セルであることを示す固定コード�
 // 機械的に「全ロット対象の回収である」と判別できるようにするためのマーカー。
 const ALL_LOTS_MARKER = "ALLLOTS";
 // CSV生成ロジックのバージョン。網羅性・正確性・完全性等の判定ロジックや出力列構成を変更した場合はここを更新する。
-const BUILD_LOGIC_VERSION = "1.9";
+const BUILD_LOGIC_VERSION = "1.10";
 const STATUS_COL = "状態";
 const STATUS_ACTIVE = "現行";
 const STATUS_REMOVED = "回収済み（PMDA提供データから削除）";
@@ -480,8 +480,8 @@ function extractProgramIds(freeText) {
 function extractProgramVersions(freeText) {
   if (!freeText) return [];
   const normalized = toHalfWidth(freeText);
-  const matches = normalized.match(/バージョン\s*[0-9]+(?:\.[0-9]+)*/g) || [];
-  return [...new Set(matches.map((s) => s.replace(/\s+/g, "")))];
+  const matches = [...normalized.matchAll(/バージョン\s*([0-9]+(?:\.[0-9]+)*)/g)];
+  return [...new Set(matches.map((m) => m[1]))];
 }
 
 // ロット・シリアルが両方欠落し自由記述からも復元できない場合の最終フォールバック。
