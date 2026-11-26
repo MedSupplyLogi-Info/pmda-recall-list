@@ -21,7 +21,7 @@ const NODATA = "NODATA"; // 空欄セルであることを示す固定コード�
 // 機械的に「全ロット対象の回収である」と判別できるようにするためのマーカー。
 const ALL_LOTS_MARKER = "ALLLOTS";
 // CSV生成ロジックのバージョン。網羅性・正確性・完全性等の判定ロジックや出力列構成を変更した場合はここを更新する。
-const BUILD_LOGIC_VERSION = "2.0";
+const BUILD_LOGIC_VERSION = "2.1";
 const STATUS_COL = "状態";
 const STATUS_ACTIVE = "現行";
 const STATUS_REMOVED = "回収済み（PMDA提供データから削除）";
@@ -794,10 +794,13 @@ async function processClass(cls) {
 }
 
 // CSVインジェクション（Excel等での数式注入）対策。
-// セルの先頭が =, +, -, @ や タブ/改行等だと、Excelで開いた際に数式として
+// セルの先頭が =, +, @ や タブ/改行等だと、Excelで開いた際に数式として
 // 評価されてしまう場合があるため、先頭にシングルクォートを付与して無害化する
 // （PMDA自身の公開CSVでも同様の手法で日付列等をテキスト強制している）。
-const FORMULA_TRIGGER_CHARS = /^[=+\-@\t\r]/;
+// ハイフン(-)は対象から除外している。ロット番号・シリアル番号等の識別子はハイフンで
+// 始まることがなく、誤って付与されたアポストロフィがバーコード完全一致照合の妨げになる
+// リスクの方が大きいため。
+const FORMULA_TRIGGER_CHARS = /^[=+@\t\r]/;
 function sanitizeCsvCell(v) {
   const s = String(v);
   return FORMULA_TRIGGER_CHARS.test(s) ? "'" + s : s;
