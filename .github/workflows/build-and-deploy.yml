@@ -79,6 +79,7 @@ jobs:
         run: |
           mkdir -p _site/data
           cp index.html _site/index.html
+          cp robots.txt _site/robots.txt
           cp data/recall_list_merged.csv _site/data/recall_list_merged.csv
           cp data/recall_list_cumulative.csv _site/data/recall_list_cumulative.csv
           cp data/meta.js _site/data/meta.js
