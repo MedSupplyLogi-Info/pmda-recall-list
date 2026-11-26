@@ -164,10 +164,30 @@
   .status-ok { background: #e3f2ef; color: #0f6e64; }
   .status-warn { background: #fdf1e2; color: #b45309; }
   .status-removed { background: #ececec; color: #5f6b7a; }
+  .test-banner {
+    background: #fff3cd;
+    border: 2px solid #d9a404;
+    color: #6b4a00;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    font-size: 14px;
+  }
+  .test-banner strong {
+    display: block;
+    font-size: 16px;
+    margin-bottom: 6px;
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
+  <div class="test-banner">
+    <strong>⚠ このページは試験運用（テスト）段階です</strong>
+    本サイトおよび提供するCSVは現在開発・検証中であり、内容の正確性・網羅性は保証されません。
+    データ処理ロジックは今後も変更される可能性があります。実務上の判断（回収対象の確認等）には、
+    必ずPMDA公式サイトの原本情報をご確認いただき、本サイトの情報を単独の根拠として使用しないでください。
+  </div>
   <h1>PMDA医療機器回収情報 統合CSV</h1>
   <p class="lead">
     PMDA（医薬品医療機器総合機構）が公開するクラスI・II・IIIの医療機器回収情報を統合し、
